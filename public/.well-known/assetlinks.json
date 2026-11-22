@@ -1,0 +1,14 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "de.joancode.lanis",
+      "sha256_cert_fingerprints": [
+        "7F:6E:E0:89:5D:E7:45:67:3F:38:BF:C8:4C:8C:C0:B7:9F:C6:64:EF:75:10:F6:78:4C:CD:76:7A:65:9E:4F:62",
+        "DA:61:7B:1B:1D:D9:B9:05:6B:72:78:82:BD:D8:D4:52:BF:CD:A2:BE:4A:6F:BD:0E:E2:20:0C:CB:66:6F:6B:2F",
+        "9F:04:FA:6B:2A:5E:12:B8:CF:B7:AC:58:79:4A:BD:21:E9:2B:90:DA:88:C5:0D:6D:BE:F4:3B:DF:DA:2A:F9:A4"
+      ]
+    }
+  }
+]
