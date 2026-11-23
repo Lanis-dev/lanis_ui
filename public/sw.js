@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lanis-ui-shell-v10'
+const CACHE_NAME = 'lanis-ui-shell-v11'
 const OFFLINE_RESPONSE = () =>
   new Response('Offline', {
     status: 503,
@@ -11,6 +11,7 @@ const OFFLINE_RESPONSE = () =>
 const THEME_NAMES = ['cyan', 'emerald', 'sapphire', 'amethyst', 'ruby', 'amber', 'coral', 'blush', 'moss']
 const THEME_ASSET_NAMES = [
   'site.webmanifest',
+  'icon.svg',
   'favicon-16x16.png',
   'favicon-32x32.png',
   'apple-touch-icon.png',
@@ -22,6 +23,7 @@ const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/favicon/site.webmanifest',
+  '/favicon/icon.svg',
   '/favicon/favicon.ico',
   '/favicon/favicon-16x16.png',
   '/favicon/favicon-32x32.png',
