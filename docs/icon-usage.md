@@ -22,7 +22,8 @@ and renders the PNG, ICO and WebP assets. Option D applies
 | Android launchers and round launchers | `generate-android-icons.mjs` on `feat/android-app` | Packaged copies of all nine 512px theme images |
 | Android recent-apps/task icon | `MainActivity.kt` | Selected launcher resource |
 | Android system splash | `ic_lanis_splash` → `ic_lanis` → `ic_lanis_ruby` | Default ruby |
-| Android notification/status, quick-settings tile, shortcuts, monochrome launcher | `ic_stat_lanis` | Monochrome glyph, intentionally independent of the color palette |
+| Android launcher shortcuts | `ic_lanis` | Full-color Ruby artwork |
+| Android notifications and Quick Settings | `ic_lanis_system` | Official SVG cap path, tinted by Android |
 | Admin portal header | `lanis_admin/public/lanis-logo.svg` | Copy of the generated cyan SVG |
 
 `lanis_api` contains no bundled LANIS icon references. The admin portal is a
