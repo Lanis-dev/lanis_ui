@@ -8,8 +8,8 @@ android {
         applicationId "de.joancode.lanis"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 17
-        versionName "1.0.16"
+        versionCode 19
+        versionName "1.0.18"
         buildConfigField "boolean", "PUSH_CONFIGURED", file('google-services.json').exists().toString()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
