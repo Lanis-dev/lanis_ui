@@ -89,7 +89,7 @@ export function getThemeAssetName(color: ThemeColor) {
   return closest;
 }
 
-export function getThemeIconUrl(color: ThemeColor, filename = 'android-chrome-192x192.png') {
+export function getThemeIconUrl(color: ThemeColor, filename = 'icon.svg') {
   return `/favicon/themes/${getThemeAssetName(color)}/${filename}`;
 }
 
