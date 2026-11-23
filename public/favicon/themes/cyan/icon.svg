@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <clipPath id="tile">
+      <rect width="512" height="512" rx="76.3"/>
+    </clipPath>
+    <path id="cap" d="
+      M116.4 197.7 243.5 128.5Q256 122.8 268.5 128.5L411.8 206.7
+      C417.4 209.8 420.65 214.6 420.65 220.3V316.6a15.1 15 0 0 1-30.2 0V228.2
+      L270.2 293.6q-14.2 7.8-28.4 0L116.4 225.2a15.7 15.7 0 0 1 0-27.5Z
+      M151.8 273.7l90 49.4q14.2 7.6 28.4 0l90.1-49.4v42.9
+      c0 10.8-5.7 20.2-15.3 25.5l-74.8 40.8q-14.2 7.8-28.4 0
+      L167 342.1c-9.6-5.3-15.3-14.7-15.3-25.5Z"/>
+    <linearGradient id="long-shadow" gradientUnits="userSpaceOnUse" x1="162.5" y1="162.5" x2="510.5" y2="510.5" color="#07151c">
+      <stop stop-color="currentColor" offset="0" stop-opacity=".22"/>
+      <stop stop-color="currentColor" offset=".3233" stop-opacity=".153"/>
+      <stop stop-color="currentColor" offset=".4382" stop-opacity=".126"/>
+      <stop stop-color="currentColor" offset=".5460" stop-opacity=".106"/>
+      <stop stop-color="currentColor" offset=".5891" stop-opacity=".097"/>
+      <stop stop-color="currentColor" offset=".7040" stop-opacity=".071"/>
+      <stop stop-color="currentColor" offset=".7902" stop-opacity=".053"/>
+      <stop stop-color="currentColor" offset=".8693" stop-opacity=".039"/>
+      <stop stop-color="currentColor" offset=".9339" stop-opacity=".026"/>
+      <stop stop-color="currentColor" offset="1" stop-opacity=".020"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="9.9"/>
+    </filter>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="#01bcd6"/>
+    <path fill="url(#long-shadow)" d="M113 222 185 294 165 303 151.7 314 158 335 335 512H512V304L416 208Z"/>
+    <g fill="#07151c">
+      <use href="#cap" y="10.6" opacity=".332" filter="url(#soft-shadow)"/>
+      <use href="#cap" y="2.3" opacity=".377"/>
+      <use href="#cap"/>
+    </g>
+  </g>
+</svg>
