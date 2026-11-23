@@ -39,7 +39,7 @@ class LanisMessagingService : FirebaseMessagingService() {
                 val appLocked = AppLock.enabled(this)
                 val title = if (appLocked) "LANIS" else data["title"] ?: "LANIS"
                 val body = if (appLocked) "Neue Informationen. Zum Öffnen entsperren." else data["body"] ?: "Es gibt neue Informationen."
-                val notification = NotificationCompat.Builder(this, channel).setSmallIcon(R.drawable.ic_stat_lanis)
+                val notification = NotificationCompat.Builder(this, channel).setSmallIcon(R.drawable.ic_lanis_system)
                     .setContentTitle(title).setContentText(body)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                     .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(false)

@@ -98,7 +98,7 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_changes" />
         </receiver>
         <service android:name=".TimetableTileService" android:exported="true" android:label="@string/widget_today"
-            android:icon="@drawable/ic_stat_lanis" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            android:icon="@drawable/ic_lanis_system" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
         </service>
 

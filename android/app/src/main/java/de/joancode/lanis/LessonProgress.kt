@@ -65,7 +65,7 @@ object LessonProgress {
                 val open = PendingIntent.getActivity(context, ID, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                 val title = if (AppLock.enabled(context)) "Unterrichtsfortschritt" else active.title
                 val notification = Notification.Builder(context, CHANNEL)
-                    .setSmallIcon(R.drawable.ic_stat_lanis).setContentTitle(title)
+                    .setSmallIcon(R.drawable.ic_lanis_system).setContentTitle(title)
                     .setContentText("Verbleibende Zeit").setWhen(active.end.toEpochMilli())
                     .setUsesChronometer(true).setChronometerCountDown(true)
                     .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
