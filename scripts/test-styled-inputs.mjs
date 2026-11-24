@@ -160,6 +160,18 @@ try {
   await page.mouse.click(4, 4);
   await page.waitForFunction(() => !document.querySelector('[role="dialog"][aria-label="Suche"]'));
   assert.equal(await page.evaluate(() => document.activeElement.id), 'open-search');
+
+  await page.click('#open-search');
+  await page.waitForSelector('input[role="combobox"]');
+  await page.type('input[role="combobox"]', 'Kalender');
+  await page.waitForSelector('[role="option"][tabindex="-1"]');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'Suche leeren');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('role')), 'combobox');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('[role="dialog"][aria-label="Suche"]'));
+
   await page.click('#open-modal');
   await page.evaluate(() => window.showFixtureSearch(true));
   await page.waitForSelector('[role="dialog"][aria-label="Suche"]');
