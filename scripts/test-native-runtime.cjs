@@ -134,3 +134,89 @@ test('stored account colours override a stale Ruby WebView theme, including appe
   assert.equal(r.appearances.at(-1).accent, '#19a987');
   assert.equal(r.appearances.at(-1).oled, true);
 });
+
+async function notificationToggle({ accountEnabled, deviceEnabled, registrationFails = false, loadFails = false }) {
+  let cursor = 0;
+  let mounted = false;
+  const state = [];
+  const actions = [];
+  const jsx = (type, props) => ({ type, props });
+  const context = {
+    exports: {},
+    window: { location: { pathname: '/settings/notifications' }, addEventListener() {} },
+    require(name) {
+      if (name === 'react') return {
+        useState(initial) {
+          const index = cursor++;
+          if (!(index in state)) state[index] = initial;
+          return [state[index], value => { state[index] = typeof value === 'function' ? value(state[index]) : value; }];
+        },
+        useEffect(callback) { if (!mounted) callback(); },
+        useCallback: callback => callback,
+      };
+      if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
+      if (name === '@capacitor/app') return { App: { addListener: async () => ({ remove() {} }) } };
+      if (name.endsWith('/AuthContext')) return { useAuth: () => ({ token: 'test' }) };
+      if (name.endsWith('/PreferencesContext')) return { usePreferences: () => ({ preferences: { vertretungsplan: { class_override: '' } } }) };
+      if (name.endsWith('/androidNavigation')) return { useAndroidTabs: () => [[], () => {}] };
+      if (name.endsWith('/SettingsSwitch')) return { default: 'SettingsSwitch' };
+      if (name.endsWith('/native')) return { isAndroid: true, LanisNative: {
+        async getStatus() { return { pushConfigured: true, notificationsEnabled: deviceEnabled }; },
+        async setNotifications({ enabled }) {
+          actions.push(['device', enabled]);
+          if (enabled && registrationFails) throw Error('Registration failed');
+          return { pushConfigured: true, notificationsEnabled: enabled, notificationsAllowed: true };
+        },
+      } };
+      if (name.endsWith('/api')) return { notificationsAPI: {
+        async getAndroidConfig() { return { configured: true }; },
+        async getPreferences() {
+          if (loadFails) throw Error('Preferences unavailable');
+          return { success: true, preferences: { enabled: accountEnabled, messages_enabled: true } };
+        },
+        async updatePreferences(token, preferences) {
+          actions.push(['account', preferences.enabled]);
+          return { success: true, preferences };
+        },
+      } };
+      return {};
+    },
+  };
+  const source = fs.readFileSync(path.join(__dirname, '../src/components/android/AndroidSettings.tsx'), 'utf8');
+  vm.runInNewContext(ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText, context);
+  const render = () => {
+    cursor = 0;
+    const tree = context.exports.default({ notificationsOnly: true });
+    mounted = true;
+    return tree;
+  };
+  const findSwitch = node => {
+    if (Array.isArray(node)) return node.map(findSwitch).find(Boolean);
+    if (node?.props?.label === 'Benachrichtigungen aktivieren') return node.props;
+    return node?.props && findSwitch(node.props.children);
+  };
+  render();
+  await settle();
+  const toggle = findSwitch(render());
+  assert.equal(toggle.disabled, false);
+  toggle.onChange();
+  await settle();
+  return actions;
+}
+
+test('Android opt-out updates only the device even if account preferences are loaded', async () => {
+  for (const loadFails of [false, true]) {
+    assert.deepEqual(await notificationToggle({ accountEnabled: true, deviceEnabled: true, loadFails }), [['device', false]]);
+  }
+});
+
+test('Android registration failure never disables account-wide notifications', async () => {
+  assert.deepEqual(await notificationToggle({ accountEnabled: true, deviceEnabled: false, registrationFails: true }),
+    [['account', true], ['device', true], ['device', false]]);
+  assert.deepEqual(await notificationToggle({ accountEnabled: false, deviceEnabled: false, registrationFails: true }),
+    [['device', true], ['device', false]]);
+  assert.deepEqual(await notificationToggle({ accountEnabled: false, deviceEnabled: false }),
+    [['device', true], ['account', true]]);
+});

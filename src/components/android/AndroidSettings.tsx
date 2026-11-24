@@ -74,29 +74,34 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
     finally { setBusy(false); }
   };
 
-  const enableNotifications = async (enabled: boolean) => {
+  const toggleDeviceNotifications = async (enabled: boolean) => {
     if (!enabled) {
       setStatus(await LanisNative.setNotifications({ enabled: false }));
       setMessage('Benachrichtigungen auf diesem Gerät deaktiviert.');
+      return;
     }
     if (!token || !loaded) return;
-    if (enabled && !prefs.messages_enabled && !prefs.vertretungsplan_enabled) throw new Error('Wähle mindestens eine Benachrichtigungsart.');
-    // Persist categories first so device registration can't create unexpected alerts.
-    const next = withSelectedClass({ ...prefs, enabled });
-    const response = await notificationsAPI.updatePreferences(token, next);
-    if (!response.success) throw new Error('Die Benachrichtigungen konnten nicht gespeichert werden.');
-    setPrefs(response.preferences);
+    if (!prefs.messages_enabled && !prefs.vertretungsplan_enabled) throw new Error('Wähle mindestens eine Benachrichtigungsart.');
+    const saveEnabledPreferences = async () => {
+      const response = await notificationsAPI.updatePreferences(token, withSelectedClass({ ...prefs, enabled: true }));
+      if (!response.success) throw new Error('Die Benachrichtigungen konnten nicht gespeichert werden.');
+      setPrefs(response.preferences);
+    };
+
+    // For an active account, save the selected categories before adding the device.
+    if (prefs.enabled) await saveEnabledPreferences();
     try {
-      if (enabled) {
-        const result = await LanisNative.setNotifications({ enabled: true });
-        setStatus(result);
-        if (!result.notificationsAllowed) throw new Error('Erlaube Benachrichtigungen in den Android-Einstellungen.');
-      }
-      setMessage(enabled ? 'Benachrichtigungen aktiviert.' : 'Benachrichtigungen deaktiviert.');
+      const result = await LanisNative.setNotifications({ enabled: true });
+      if (!result.notificationsAllowed) throw new Error('Erlaube Benachrichtigungen in den Android-Einstellungen.');
+      // A new device can register before account-wide delivery is enabled.
+      if (!prefs.enabled) await saveEnabledPreferences();
+      setStatus(result);
+      setMessage('Benachrichtigungen auf diesem Gerät aktiviert.');
     } catch (error) {
-      if (enabled) {
-        const rollback = await notificationsAPI.updatePreferences(token, { ...next, enabled: false });
-        setPrefs(rollback.preferences);
+      try {
+        setStatus(await LanisNative.setNotifications({ enabled: false }));
+      } catch {
+        // Keep the original registration error.
       }
       throw error;
     }
@@ -160,7 +165,7 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
 
     <section className="card"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary-50 p-2.5 text-primary-600 dark:bg-primary-950 dark:text-primary-400"><BellIcon className="h-5 w-5" /></div><div className="min-w-0 flex-1"><h2 className="section-title break-words">Benachrichtigungen</h2><p className="mt-1 text-sm text-surface-500 dark:text-surface-400">Nachrichten und Vertretungen direkt auf deinem Handy.</p></div></div>
       {nativeAvailable && loaded && (!serverPush || !status?.pushConfigured) && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">Benachrichtigungen sind noch nicht eingerichtet.</p>}
-      <div className="mt-5 flex items-center justify-between gap-4 border-b border-surface-200 pb-4 dark:border-surface-700"><p className="text-sm font-medium">Auf diesem Gerät aktivieren</p><SettingsSwitch label="Benachrichtigungen aktivieren" checked={deviceNotificationsEnabled} disabled={busy || (!deviceNotificationsEnabled && (!loaded || !serverPush || !status?.pushConfigured))} onChange={() => void run(() => enableNotifications(!deviceNotificationsEnabled))} /></div>
+      <div className="mt-5 flex items-center justify-between gap-4 border-b border-surface-200 pb-4 dark:border-surface-700"><p className="text-sm font-medium">Auf diesem Gerät aktivieren</p><SettingsSwitch label="Benachrichtigungen aktivieren" checked={deviceNotificationsEnabled} disabled={busy || (!deviceNotificationsEnabled && (!loaded || !serverPush || !status?.pushConfigured))} onChange={() => void run(() => toggleDeviceNotifications(!deviceNotificationsEnabled))} /></div>
       <div className="mt-4 space-y-4">{([{ key: 'messages_enabled', label: 'Neue Nachrichten' }, { key: 'vertretungsplan_enabled', label: 'Vertretungen' }, { key: 'show_preview', label: 'Inhaltsvorschau' }] as const).map(({ key, label }) => <div key={key} className="flex min-h-11 items-center justify-between gap-4 text-sm text-surface-800 dark:text-surface-200"><span>{label}</span><SettingsSwitch label={label} disabled={busy || !loaded} checked={prefs[key]} onChange={() => setPrefs(current => ({ ...current, [key]: !current[key] }))} /></div>)}
         <p className="text-sm font-medium">Benachrichtigungszeiten</p>
         <div className="grid grid-cols-2 gap-3"><div className="min-w-0 text-xs text-surface-500">Ab<TimeInput aria-label="Benachrichtigungen ab" className="input mt-1 w-full min-w-0" value={prefs.start_time} disabled={busy || !loaded} onValueChange={value => setPrefs({ ...prefs, start_time: value })} /></div><div className="min-w-0 text-xs text-surface-500">Bis<TimeInput aria-label="Benachrichtigungen bis" className="input mt-1 w-full min-w-0" value={prefs.end_time} disabled={busy || !loaded} onValueChange={value => setPrefs({ ...prefs, end_time: value })} /></div></div>
