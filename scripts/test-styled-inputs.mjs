@@ -5,10 +5,22 @@ import postcss from 'postcss';
 import tailwind from 'tailwindcss';
 import puppeteer from 'puppeteer-core';
 
+const searchMocks = {
+  '../../contexts/AuthContext': 'export const useAuth = () => ({ token: null, user: null });',
+  '../../analytics/client': 'export const capture = () => {};',
+  '../../utils/accountDataWrites': 'export const readPersonalCache = () => null;',
+  '../../utils/moduleCache': 'export const readModulesCache = () => [];',
+  '../../services/api': ['authAPI', 'messagesAPI', 'calendarAPI', 'coursesAPI', 'appsAPI',
+    'searchAPI', 'studyGroupsAPI', 'timetableAPI', 'dateiverteilungAPI']
+    .map(name => `export const ${name} = {};`).join(' '),
+};
+
 const bundle = await build({
   stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
     import React, {useState, useRef} from 'react';
     import {createRoot} from 'react-dom/client';
+    import {MemoryRouter} from 'react-router-dom';
+    import GlobalSearch from './src/components/search/GlobalSearch';
     import {Select, SelectOption} from './src/components/ui/Select';
     import {TimeInput} from './src/components/ui/TimeInput';
     import {ColorPicker} from './src/components/ui/ColorPicker';
@@ -19,6 +31,7 @@ const bundle = await build({
     function App() {
       const [value,setValue]=useState(''), [time,setTime]=useState('08:05'), [color,setColor]=useState('#123456');
       const [modal,setModal]=useState(false), ref=useRef(null), dialog=useRef(null);
+      const [searchOpen,setSearchOpen]=useState(false);
       useDialogFocus(modal, ref, () => setModal(false));
       const choices=<><SelectOption value="">Alle Kategorien</SelectOption>{[
         ['alpha','Alpha'],['disabled','Nicht verfügbar'],['beta','Beta']
@@ -37,12 +50,20 @@ const bundle = await build({
         <ThemeColorPicker id="theme-color" value={color} onChange={setColor}/>
         <button id="open-native-dialog" onClick={()=>dialog.current.showModal()}>Dialog</button>
         <dialog ref={dialog} className="card w-72"><Select id="dialog-filter" aria-label="Dialogauswahl" value={value} onValueChange={setValue}>{choices}</Select><button onClick={()=>dialog.current.close()}>Schließen</button></dialog>
+        <button id="open-search" onClick={()=>setSearchOpen(true)}>Suche öffnen</button>
+        <GlobalSearch isOpen={searchOpen} onClose={()=>setSearchOpen(false)} basePath="/demo" />
         <button id="open-modal" onClick={()=>setModal(true)}>Modal</button>
         {modal && <div ref={ref} role="dialog" aria-modal="true" aria-label="Modal" style={{position:'fixed',inset:16}} className="card"><Select id="modal-filter" aria-label="Modalauswahl" value={value} onValueChange={setValue}>{choices}</Select><button onClick={()=>setModal(false)}>Schließen</button></div>}
       </main>;
     }
-    createRoot(document.getElementById('root')).render(<App/>);
+    createRoot(document.getElementById('root')).render(<MemoryRouter><App/></MemoryRouter>);
   ` },
+  plugins: [{ name: 'search-services', setup(builder) {
+    builder.onResolve({ filter: /.*/ }, args => (
+      Object.hasOwn(searchMocks, args.path) ? { path: args.path, namespace: 'search-mock' } : undefined
+    ));
+    builder.onLoad({ filter: /.*/, namespace: 'search-mock' }, args => ({ contents: searchMocks[args.path], loader: 'js' }));
+  } }],
   bundle: true, write: false, format: 'iife', define: { 'process.env.NODE_ENV': '"production"' },
 });
 const css = await postcss([tailwind()]).process(await readFile('src/index.css', 'utf8'), { from: 'src/index.css' });
@@ -130,6 +151,13 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
   assert.equal(await page.evaluate(() => document.activeElement.id), 'open-modal');
+  await page.click('#open-search');
+  await page.waitForSelector('[role="dialog"][aria-label="Suche"]');
+  assert.equal(await page.$eval('#open-search', button => button.inert), true);
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('role')), 'combobox');
+  await page.mouse.click(4, 4);
+  await page.waitForFunction(() => !document.querySelector('[role="dialog"][aria-label="Suche"]'));
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'open-search');
   assert.equal(await page.$('input[type="time"], input[type="color"], select:not([aria-hidden="true"])'), null);
   assert.deepEqual(errors, []);
   if (!firefox) {
@@ -149,7 +177,11 @@ try {
     await touch.waitForSelector('[data-input-popup] .react-colorful');
     await touch.tap('button[aria-label="Farbauswahl schließen"]');
     await touch.waitForFunction(() => !document.querySelector('[data-input-popup]'));
+    await touch.tap('#open-search');
+    await touch.waitForSelector('[role="dialog"][aria-label="Suche"]');
+    await touch.touchscreen.tap(4, 4);
+    await touch.waitForFunction(() => !document.querySelector('[role="dialog"][aria-label="Suche"]'));
     await touch.close();
   }
-  console.log(`${firefox ? 'Firefox' : 'Chromium'}: mobile/desktop light/dark/OLED, selection/reset/disabled/typeahead, time editing, color commit, modal focus and Android back passed.`);
+  console.log(`${firefox ? 'Firefox' : 'Chromium'}: mobile/desktop light/dark/OLED, selection/reset/disabled/typeahead, time editing, color commit, modal focus, search backdrop and Android back passed.`);
 } finally { await browser.close(); }

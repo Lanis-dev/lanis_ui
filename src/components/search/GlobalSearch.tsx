@@ -628,9 +628,9 @@ export default function GlobalSearch({
   const showEmpty = !showLoading && (!token || tier >= 3) && query.length >= 1 && combinedResults.length === 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center px-3 pt-3 sm:px-4 sm:pt-[12vh]">
-      <div className="fixed inset-0 bg-surface-950/50 backdrop-blur-md" onClick={onClose} />
-      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Suche" className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-soft-lg dark:bg-surface-900 sm:max-h-[76dvh]">
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Suche" className="fixed inset-0 z-[100] flex items-start justify-center px-3 pt-3 sm:px-4 sm:pt-[12vh]">
+      <div aria-hidden="true" className="fixed inset-0 bg-surface-950/50 backdrop-blur-md" onClick={onClose} />
+      <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-soft-lg dark:bg-surface-900 sm:max-h-[76dvh]">
         <div className="flex shrink-0 items-center gap-3 border-b border-surface-100 px-4 py-2 dark:border-surface-800">
           <MagnifyingGlassIcon className="h-5 w-5 text-primary-500 dark:text-primary-400 flex-shrink-0" />
           <input

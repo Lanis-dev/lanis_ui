@@ -5,12 +5,30 @@ import androidx.work.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONException
 import org.json.JSONObject
 import java.net.URI
 import java.util.concurrent.TimeUnit
 
-class SyncFailure(val status: Int = 0) : Exception()
+internal class SyncFailure(val status: Int = 0, private val code: String? = null) : Exception() {
+    val requiresPasswordChange get() = status == 403 && code == "password_change_required"
+    val invalidSession get() = status == 401 || (status == 403 && !requiresPasswordChange)
+
+    companion object {
+        fun fromResponse(response: Response): SyncFailure {
+            if (response.code != 403) return SyncFailure(response.code)
+            // The detail is small. Never read an unbounded error body.
+            val code = try {
+                JSONObject(response.peekBody(16L * 1024).string()).optJSONObject("detail")?.optString("code")
+            } catch (_: JSONException) {
+                null
+            }
+            return SyncFailure(response.code, code)
+        }
+    }
+}
 
 object DeviceSync {
     private val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
@@ -29,7 +47,7 @@ object DeviceSync {
         if (token.isNotEmpty()) builder.header("X-Session-Token", token)
         if (method != "GET") builder.method(method, (body ?: JSONObject()).toString().toRequestBody(json))
         client.newCall(builder.build()).execute().use { response ->
-            if (!response.isSuccessful) throw SyncFailure(response.code)
+            if (!response.isSuccessful) throw SyncFailure.fromResponse(response)
             val source = response.body?.source() ?: throw SyncFailure()
             if (source.request(8L * 1024 * 1024 + 1)) throw SyncFailure() // Bound untrusted server responses.
             return JSONObject(source.readUtf8())
@@ -142,7 +160,10 @@ object DeviceSync {
         } catch (_: SessionChanged) {
             true
         } catch (error: Exception) {
-            val invalidSession = error is SyncFailure && (error.status == 401 || error.status == 403)
+            val failure = error as? SyncFailure
+            // The WebView's password-change flow needs the existing session and cache.
+            if (failure?.requiresPasswordChange == true) return@sync true
+            val invalidSession = failure?.invalidSession == true
             synchronized(NativeStore.lock) {
                 val current = NativeStore.read(context)
                 if (!session.owns(current)) return@sync true
