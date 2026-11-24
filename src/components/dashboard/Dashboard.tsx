@@ -198,7 +198,8 @@ const Dashboard: React.FC = () => {
     if (!module) return;
     openedModuleRef.current = requestedModule;
     setSearchParams(current => { const next = new URLSearchParams(current); next.delete('module'); return next; }, { replace: true });
-    handleModuleClick(module, !isAndroid);
+    // The WebView can consume a launch URL while Android’s app-lock cover is visible.
+    handleModuleClick(module, true);
   }, [requestedModule, isLoading, modules]);
 
   useEffect(() => {
