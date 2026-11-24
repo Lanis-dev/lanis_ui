@@ -1,5 +1,5 @@
-import { capture } from '../../analytics/client';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { capture } from '../../analytics/client';
 import { format, isToday } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Link, useNavigate } from 'react-router-dom';
@@ -79,6 +79,14 @@ const Timetable: React.FC = () => {
   const timeSlots = data?.time_slots || [];
   const examsError = Boolean(data?.exams_error);
   const substitutionSources = data?.substitution_sources || [];
+  const cachedAt = data?.offline_cached_at;
+
+  useEffect(() => {
+    const refreshOnResume = () => refresh();
+    window.addEventListener('lanis:resume', refreshOnResume);
+    window.addEventListener('online', refreshOnResume);
+    return () => { window.removeEventListener('lanis:resume', refreshOnResume); window.removeEventListener('online', refreshOnResume); };
+  }, [refresh]);
 
   const weekOverride = timetableViewMode === 'week' && hasAlternatingWeeks ? selectedWeek : undefined;
   const displayedExams = preferences.timetable.show_exams ? exams : [];
@@ -172,6 +180,7 @@ const Timetable: React.FC = () => {
           )}
         </div>
 
+        {cachedAt && <p role="status" className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">Gespeicherter Stundenplan · Stand {new Date(cachedAt).toLocaleString('de-DE')}. Neuere Änderungen können fehlen.</p>}
         <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-surface-500 dark:text-surface-400">
           {loading && <span className="skeleton inline-block h-4 w-32" aria-hidden="true" />}
           {substitutionSources.map(source => <span key={source.name} className={source.error ? 'text-amber-700 dark:text-amber-300' : ''}>
@@ -217,13 +226,14 @@ const Timetable: React.FC = () => {
             <TimelineView days={visibleDays} entriesByDate={entriesByDate} lessonFocus={lessonFocus} timeSlots={timeSlots} onOpenCourse={openCourse} />
           </div>
         ) : (
-          <div ref={dayScrollerRef} className="scrollbar-hide -mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-3 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 md:gap-4 xl:grid-cols-5">
+          <div ref={dayScrollerRef} className="scrollbar-hide -mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-3 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 md:gap-4 xl:grid-cols-3 2xl:grid-cols-5">
             {visibleDays.map(day => {
               const date = new Date(`${day.date}T12:00:00`);
               const today = isToday(date);
+              const highlightToday = today && lessonFocus?.date === day.date;
               return (
-                <section key={day.date} data-today={today ? 'true' : undefined} className={`card min-w-[84vw] snap-center !p-0 overflow-hidden sm:min-w-0 ${today ? '!border-primary-300 dark:!border-primary-700 ring-2 ring-primary-500/10' : ''}`}>
-                  <div className={`border-b px-4 py-3 ${today ? 'bg-primary-50 dark:bg-primary-950/60' : 'bg-surface-50 dark:bg-surface-800/50'}`}>
+                <section key={day.date} data-today={today ? 'true' : undefined} className={`card min-w-[84vw] snap-center !p-0 overflow-hidden sm:min-w-0 ${highlightToday ? '!border-primary-300 dark:!border-primary-700 ring-2 ring-primary-500/10' : ''}`} >
+                  <div className={`border-b px-4 py-3 ${highlightToday ? 'bg-primary-50 dark:bg-primary-950/60' : 'bg-surface-50 dark:bg-surface-800/50'}`} >
                     <div className="flex items-center justify-between">
                       <h2 className="font-semibold text-surface-900 dark:text-white">{day.name || format(date, 'EEEE', { locale: de })}</h2>
                       {today && <span className="badge badge-primary">Heute</span>}

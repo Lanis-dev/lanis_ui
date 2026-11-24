@@ -1,4 +1,5 @@
 import { telemetryFetch } from '../analytics/requestTelemetry';
+import { authStorage, clearNativeSession } from '../platform/authStorage';
 export const CUSTOM_BACKEND_STORAGE_KEY = 'lanis_custom_backend_url';
 
 const BACKEND_SCOPED_STORAGE_KEYS = [
@@ -87,9 +88,10 @@ export function resetCustomBackendUrl(): void {
   window.localStorage.removeItem(CUSTOM_BACKEND_STORAGE_KEY);
 }
 
-export function clearBackendScopedStorage(): void {
+export async function clearBackendScopedStorage(preserveDeletionRecovery = false): Promise<void> {
   for (const key of BACKEND_SCOPED_STORAGE_KEYS) {
-    window.localStorage.removeItem(key);
+    if (key.startsWith('auth_')) authStorage.removeItem(key);
+    else window.localStorage.removeItem(key);
   }
   for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
     const key = window.localStorage.key(index);
@@ -100,6 +102,7 @@ export function clearBackendScopedStorage(): void {
   for (const key of BACKEND_SCOPED_COOKIE_KEYS) {
     document.cookie = `${key}=;max-age=0;path=/;SameSite=Lax`;
   }
+  await clearNativeSession(preserveDeletionRecovery);
 }
 
 export async function checkBackendHealth(value: string): Promise<string> {

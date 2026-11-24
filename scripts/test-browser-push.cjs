@@ -148,6 +148,7 @@ function runtime(options = {}) {
     navigator: { onLine: true, serviceWorker: { addEventListener, removeEventListener } },
     require(name) {
       if (name === 'react') return { useEffect(effect) { cleanup = effect(); } };
+      if (name === '../analytics/client') return { analyticsEpoch: () => 0, capture() {} };
       if (name === 'react-router-dom') return { useLocation: () => ({ pathname: options.path || '/dashboard' }) };
       if (name === '../contexts/AuthContext') return { useAuth: () => ({ token: 'session', isAuthenticated: options.authenticated !== false, user: { school_id: '5201', username: 'user' } }) };
       if (name === '../utils/accountDataWrites') return { captureAccountDataGeneration: () => 1, canWriteAccountData: () => true };

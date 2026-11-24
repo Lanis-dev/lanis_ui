@@ -67,6 +67,7 @@ const Component = load('src/components/search/GlobalSearch.tsx', name => {
   if (name.endsWith('/AuthContext')) return { useAuth: () => ({ token: 'test', user: null }) };
   if (name.endsWith('/services/api')) return api;
   if (name.endsWith('/utils/search')) return matching;
+  if (name.endsWith('/hooks/useDialogFocus')) return { useDialogFocus() {} };
   if (name.endsWith('/moduleCache')) return { readModulesCache: () => { moduleReads++; return []; } };
   if (name.endsWith('/courseNormalization')) return { normalizeCourseList: () => [] };
   if (name.endsWith('/accountDataWrites')) return { readPersonalCache: key => personalCaches[key] || null };

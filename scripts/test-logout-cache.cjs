@@ -14,7 +14,7 @@ const storage = {
   removeItem(key) { values.delete(key); },
 };
 const window = { dispatchEvent(event) { events.push(event.type); }, localStorage: storage, location: { pathname: '/messages', href: '' }, addEventListener() {}, setInterval() { return 1; }, clearInterval() {} };
-const context = { Event, window, localStorage: storage, navigator: {}, console, URL, document: { cookie: '' }, setTimeout, clearTimeout, Blob, FormData, AbortController };
+const context = { Event, window, location: window.location, localStorage: storage, navigator: {}, console, URL, document: { cookie: '' }, setTimeout, clearTimeout, Blob, FormData, AbortController };
 const modules = new Map();
 function load(relative) {
   const filename = path.resolve(__dirname, '../src', relative);
@@ -26,6 +26,10 @@ function load(relative) {
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText, {
     ...context, exports, require(name) {
       if (name === 'axios') return axios;
+      if (name === '@capacitor/core') return { Capacitor: { getPlatform: () => 'web' }, registerPlugin: () => ({}) };
+      if (name === '@capacitor/filesystem') return { Filesystem: {}, Directory: {} };
+      if (name === '@capacitor/share') return { Share: {} };
+      if (name === '@capacitor/browser') return { Browser: {} };
       if (name.includes('demo/mockApi')) return { getMockResponse() { throw Error('Unexpected demo request'); } };
       return load(path.relative(path.resolve(__dirname, '../src'), path.resolve(path.dirname(filename), name + '.ts')));
     },

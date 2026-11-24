@@ -1,11 +1,14 @@
 import { capture } from './analytics/client'
+import AppErrorBoundary from './components/android/AppErrorBoundary'
+import { isAndroid, androidPresentation } from './platform/native'
+import { restoreNativeSession } from './platform/authStorage'
+import { CUSTOM_BACKEND_STORAGE_KEY, getApiBaseUrl } from './utils/backendConfig'
 import AnalyticsErrorBoundary from './analytics/AnalyticsErrorBoundary'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import '@khmyznikov/pwa-install'
 import App from './App.tsx'
 import './index.css'
-import { CUSTOM_BACKEND_STORAGE_KEY } from './utils/backendConfig.ts'
 
 window.addEventListener('storage', (event) => {
   if (
@@ -26,13 +29,37 @@ const bootObserver = new MutationObserver((mutations) => {
 })
 bootObserver.observe(appRoot, { childList: true })
 
-ReactDOM.createRoot(appRoot).render(
-  <React.StrictMode>
-    <AnalyticsErrorBoundary><App /></AnalyticsErrorBoundary>
-  </React.StrictMode>,
-)
+const ErrorBoundary = isAndroid ? AppErrorBoundary : AnalyticsErrorBoundary;
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+async function start() {
+  if (androidPresentation) document.documentElement.classList.add('android-app');
+  if (isAndroid) {
+    if (import.meta.env.MODE === 'android') {
+      await Promise.all([
+        import('@fortawesome/fontawesome-free/css/all.min.css'),
+        import('@fortawesome/fontawesome-free/css/v4-shims.min.css'),
+      ]).catch(error => console.warn('Could not load Android module icons:', error));
+    }
+    try { await restoreNativeSession(getApiBaseUrl()); }
+    catch {
+      // Do not silently erase credentials if the device vault is temporarily unavailable.
+      const root = document.getElementById('root')!;
+      root.replaceChildren();
+      const panel = document.createElement('div');
+      panel.style.cssText = 'padding:32px;max-width:480px;margin:48px auto;font-family:system-ui';
+      const title = document.createElement('h1'); title.textContent = 'Anmeldung konnte nicht geladen werden';
+      const text = document.createElement('p'); text.textContent = 'Entsperre dein Gerät und versuche es erneut. Deine gespeicherten Daten bleiben erhalten.';
+      const retry = document.createElement('button'); retry.textContent = 'Erneut versuchen'; retry.onclick = () => window.location.reload();
+      panel.append(title, text, retry); root.append(panel); return;
+    }
+  }
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode><ErrorBoundary><App /></ErrorBoundary></React.StrictMode>,
+  );
+}
+void start();
+
+if (!isAndroid && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(() => { void capture('service_worker_registration', { outcome: 'registered' }) }).catch((error) => {
       void capture('service_worker_registration', { outcome: 'failed' })

@@ -1,3 +1,5 @@
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
 import { searchText, rankSearchResults, messageSearchData, compactSearchResults } from '../../utils/search';
 import { resultCountBucket, searchCategory } from '../../analytics/policy';
 import { capture } from '../../analytics/client';
@@ -197,7 +199,7 @@ function searchCacheData(
         subtitle: module.folders?.join(' · ') || 'Modul',
         category: 'Module',
         icon: HomeIcon,
-        href: moduleInAppHref(module, planNavigation, basePath) || '/dashboard',
+        href: moduleInAppHref(module, planNavigation, basePath) || `${basePath}/dashboard?module=${encodeURIComponent(module.name)}`,
       });
     }
   }
@@ -293,6 +295,8 @@ export default function GlobalSearch({
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(isOpen, dialogRef, onClose);
   const listRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
   const abortedRef = useRef(false);
@@ -452,7 +456,7 @@ export default function GlobalSearch({
         appsAPI.getModules(token, controller.signal).then(res =>
           !res.success ? [] : res.modules.filter(module => searchText(query, module)).map(module => ({
             id: `api-mod-${module.url}`, title: module.name, subtitle: module.folders?.join(' · ') || 'Modul',
-            category: 'Module', icon: HomeIcon, href: moduleInAppHref(module, planNavigation, basePath) || '/dashboard',
+            category: 'Module', icon: HomeIcon, href: moduleInAppHref(module, planNavigation, basePath) || `${basePath}/dashboard?module=${encodeURIComponent(module.name)}`,
           }))),
         timetableAPI.getTimetable(token, controller.signal).then(res => {
           if (!res.success) return [];
@@ -607,8 +611,6 @@ export default function GlobalSearch({
   }, [onClose, navigate, basePath, query, combinedResults.length, tier, token]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
-
     const flat = displayedResults;
 
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(prev => Math.max(0, Math.min(prev + 1, flat.length - 1))); }
@@ -618,7 +620,7 @@ export default function GlobalSearch({
       const sel = flat[selectedIndex];
       if (sel) executeAction(sel);
     }
-  }, [onClose, displayedResults, selectedIndex, executeAction]);
+  }, [displayedResults, selectedIndex, executeAction]);
 
   if (!isOpen) return null;
 
@@ -626,34 +628,40 @@ export default function GlobalSearch({
   const showEmpty = !showLoading && (!token || tier >= 3) && query.length >= 1 && combinedResults.length === 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] sm:pt-[20vh] px-4">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center px-3 pt-3 sm:px-4 sm:pt-[12vh]">
       <div className="fixed inset-0 bg-surface-950/50 backdrop-blur-md" onClick={onClose} />
-      <div className="relative w-full max-w-xl backdrop-blur-xl bg-white/80 dark:bg-surface-900/80 rounded-2xl shadow-soft-lg border border-white/30 dark:border-surface-700/40 overflow-hidden animate-scale-in" style={{ boxShadow: '0 4px 40px -8px rgba(0, 0, 0, 0.12), 0 12px 50px -12px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.5)' }}>
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-100/80 dark:border-surface-800/60">
+      <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Suche" className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-soft-lg dark:bg-surface-900 sm:max-h-[76dvh]">
+        <div className="flex shrink-0 items-center gap-3 border-b border-surface-100 px-4 py-2 dark:border-surface-800">
           <MagnifyingGlassIcon className="h-5 w-5 text-primary-500 dark:text-primary-400 flex-shrink-0" />
           <input
             ref={inputRef}
             type="text"
             role="combobox"
             aria-label="LANIS durchsuchen"
-            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-expanded={displayedResults.length > 0}
             aria-controls="global-search-results"
             aria-activedescendant={displayedResults[selectedIndex] ? `global-search-result-${selectedIndex}` : undefined}
             autoComplete="off"
+            autoCapitalize="none"
+            data-dialog-initial-focus=""
             value={input}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Suchen..."
-            className="flex-1 bg-transparent text-surface-900 dark:text-surface-100 text-[15px] placeholder:text-surface-400 dark:placeholder:text-surface-500 focus:outline-none"
+            placeholder="Suchen"
+            className="min-h-11 min-w-0 flex-1 bg-transparent text-base text-surface-900 placeholder:text-surface-500 focus:outline-none dark:text-surface-100 dark:placeholder:text-surface-400"
           />
-          <kbd className="hidden sm:inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded text-[11px] font-medium text-surface-400 bg-surface-100 dark:bg-surface-800/80 dark:text-surface-500 border border-surface-200/60 dark:border-surface-700/60">esc</kbd>
+          <button type="button" aria-label={input ? 'Suche leeren' : 'Suche schließen'} onClick={() => {
+            if (input) { setQuery(''); inputRef.current?.focus(); }
+            else onClose();
+          }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-surface-500 hover:bg-surface-100 dark:text-surface-400 dark:hover:bg-surface-800"><XMarkIcon className="h-5 w-5" /></button>
         </div>
 
-        <div ref={listRef} className="max-h-80 overflow-y-auto p-2">
+        <div ref={listRef} className="min-h-0 overflow-y-auto overscroll-contain p-2">
           {query.length === 0 && (
             <div className="py-12 text-center">
               <MagnifyingGlassIcon className="h-8 w-8 text-surface-300 dark:text-surface-600 mx-auto mb-3 opacity-60" />
-              <p className="text-sm text-surface-400 dark:text-surface-500">Tippe um die Suche zu starten</p>
+              <p className="text-sm text-surface-400 dark:text-surface-500">Seiten, Nachrichten und Unterricht</p>
             </div>
           )}
 
@@ -722,7 +730,7 @@ export default function GlobalSearch({
         </div>
 
         {query && (combinedResults.length > visibleResults.length || (token && query.length >= 3)) && (
-          <div className="flex flex-wrap items-center justify-center gap-3 px-4 py-2 border-t border-surface-100/80 dark:border-surface-800/60">
+          <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 px-4 py-2 border-t border-surface-100/80 dark:border-surface-800/60">
             {combinedResults.length > visibleResults.length && !expanded && (
               <button type="button" onClick={() => setExpanded(true)} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
                 Weitere Treffer anzeigen
@@ -739,7 +747,7 @@ export default function GlobalSearch({
           </div>
         )}
 
-        <div className="flex items-center justify-center gap-4 px-5 py-2 border-t border-surface-100/80 dark:border-surface-800/60 text-[11px] text-surface-400 dark:text-surface-500">
+        <div className="hidden shrink-0 items-center justify-center gap-4 px-5 py-2 sm:flex border-t border-surface-100/80 dark:border-surface-800/60 text-[11px] text-surface-400 dark:text-surface-500">
           <span className="flex items-center gap-1"><kbd className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[10px] font-medium bg-surface-100 dark:bg-surface-800/80 border border-surface-200/60 dark:border-surface-700/60">↑↓</kbd> navigieren</span>
           <span className="flex items-center gap-1"><kbd className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[10px] font-medium bg-surface-100 dark:bg-surface-800/80 border border-surface-200/60 dark:border-surface-700/60">↵</kbd> wählen</span>
           <span className="flex items-center gap-1"><kbd className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[10px] font-medium bg-surface-100 dark:bg-surface-800/80 border border-surface-200/60 dark:border-surface-700/60">esc</kbd> schließen</span>
