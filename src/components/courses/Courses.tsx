@@ -1,5 +1,7 @@
+import { isAndroid } from '../../platform/native';
 import { startExperience } from '../../analytics/experience';
 import { useBackNavigation } from '../../hooks/useBackNavigation';
+import { Select, SelectOption } from '../ui/Select';
 import { capture } from '../../analytics/client';
 import { useCachedState } from '../../hooks/useCachedState';
 import { readPersonalCache, writePersonalCache } from '../../utils/accountDataWrites';
@@ -11,6 +13,7 @@ import { usePreferences } from '../../contexts/PreferencesContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { coursesAPI } from '../../services/api';
 import axios from 'axios';
+import { openBlob } from '../../platform/files';
 import SEO from '../seo/SEO';
 import { 
   CourseEntry,
@@ -303,15 +306,10 @@ const Courses: React.FC = () => {
         if (!course.success) throw error;
         blob = await coursesAPI.downloadFile(token, match[1]);
       }
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = filename || 'download';
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      await openBlob(blob, filename || 'download');
     } catch (error) {
       console.error('Could not download course attachment', error);
-      setError('Die Datei konnte nicht geladen werden. Bitte öffne den Kurs erneut und versuche es noch einmal.');
+      setError(isAndroid ? 'Die Datei konnte nicht geöffnet werden. Versuche es erneut.' : 'Die Datei konnte nicht geladen werden. Bitte öffne den Kurs erneut und versuche es noch einmal.');
     }
   };
   const { preferences } = usePreferences();
@@ -642,20 +640,20 @@ const Courses: React.FC = () => {
                   <span className="text-xs font-medium text-surface-700 dark:text-surface-300 hidden sm:inline">Filter:</span>
                 </div>
 
-                <select
-                  value={filterAttendance}
-                  onChange={(e) => setFilterAttendance(e.target.value)}
+                <Select
+                  aria-label="Anwesenheit filtern" value={filterAttendance}
+                  onValueChange={(value) => setFilterAttendance(value)}
                   className="text-xs sm:text-sm border border-surface-300 dark:border-surface-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 min-w-0"
                 >
-                  <option value="all">Alle Einträge</option>
-                  <option value="anwesend">Anwesend</option>
-                  <option value="entschuldigt">Entschuldigt</option>
-                  <option value="unentschuldigt">Unentschuldigt</option>
-                  <option value="fehlend">Fehlend</option>
+                  <SelectOption value="all">Alle Einträge</SelectOption>
+                  <SelectOption value="anwesend">Anwesend</SelectOption>
+                  <SelectOption value="entschuldigt">Entschuldigt</SelectOption>
+                  <SelectOption value="unentschuldigt">Unentschuldigt</SelectOption>
+                  <SelectOption value="fehlend">Fehlend</SelectOption>
                   {dynamicAttendanceOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
+                    <SelectOption key={option} value={option}>{option}</SelectOption>
                   ))}
-                </select>
+                </Select>
 
                 <button
                   onClick={() => { void capture('course_filter_changed', { homework_only: !showOnlyHomework }); setShowOnlyHomework(!showOnlyHomework); }}
@@ -1223,6 +1221,7 @@ const Courses: React.FC = () => {
                     <a
                       key={index}
                       href={attachment.url}
+                      onClick={isAndroid ? (event) => downloadCourseAttachment(event, attachment.url, attachment.name) : undefined}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center p-3 border border-surface-200 dark:border-surface-700 rounded-lg transition-colors"

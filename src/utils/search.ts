@@ -9,7 +9,7 @@ export function normalizeSearchText(value: unknown): string {
 
 // One insertion, deletion, substitution, or swapped pair; short queries stay exact.
 function isNearWord(query: string, word: string): boolean {
-  if (query.length < 5 || /\d/.test(query + word) || Math.abs(query.length - word.length) > 1) return false;
+  if (query.length < 5 || /\p{Nd}/u.test(query + word) || Math.abs(query.length - word.length) > 1) return false;
   let index = 0;
   while (index < query.length && query[index] === word[index]) index++;
   if (query.length === word.length) {
@@ -88,7 +88,7 @@ export function rankSearchResults<T extends SearchResult>(query: string, keyword
     .map(item => ({ item, score: searchScore(query, item.title) * 100 + searchScore(query, item.subtitle) }))
     .sort((a, b) => b.score - a.score)
     .map(({ item }) => item);
-  return [...ranked, ...unique(semantic)].slice(0, 60);
+  return [...ranked.slice(0, 60), ...unique(semantic)];
 }
 
 /** Resolve the sender without exposing internal numeric identifiers as names. */

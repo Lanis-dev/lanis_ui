@@ -1,3 +1,5 @@
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
 import { searchText, rankSearchResults, messageSearchData, compactSearchResults } from '../../utils/search';
 import { resultCountBucket, searchCategory } from '../../analytics/policy';
 import { capture } from '../../analytics/client';
@@ -33,6 +35,7 @@ interface SearchItem {
   category: string;
   icon: React.ComponentType<{ className?: string }>;
   href?: string;
+  senderId?: string;
   action?: () => void;
 }
 
@@ -197,7 +200,7 @@ function searchCacheData(
         subtitle: module.folders?.join(' · ') || 'Modul',
         category: 'Module',
         icon: HomeIcon,
-        href: moduleInAppHref(module, planNavigation, basePath) || '/dashboard',
+        href: moduleInAppHref(module, planNavigation, basePath) || `${basePath}/dashboard?module=${encodeURIComponent(module.name)}`,
       });
     }
   }
@@ -293,6 +296,8 @@ export default function GlobalSearch({
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(isOpen, dialogRef, onClose);
   const listRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
   const abortedRef = useRef(false);
@@ -300,11 +305,13 @@ export default function GlobalSearch({
 
   const [input, setQuery] = useState('');
   const query = input.trim().replace(/\s+/g, ' ');
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tier, setTier] = useState<0 | 1 | 2 | 3>(0);
   const [apiResults, setApiResults] = useState<SearchItem[]>([]);
   const [semanticResults, setSemanticResults] = useState<SearchItem[]>([]);
   const [semanticLoading, setSemanticLoading] = useState(false);
+  const [semanticFailed, setSemanticFailed] = useState(false);
+  const [semanticAttempt, setSemanticAttempt] = useState(0);
   const [relatedQuery, setRelatedQuery] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -342,24 +349,28 @@ export default function GlobalSearch({
     [query, cacheResults, apiResults, semanticResults],
   );
 
-  const visibleResults = useMemo(() => compactSearchResults(combinedResults, expanded), [combinedResults, expanded]);
+  const relatedItems = useMemo(() => new Set(semanticResults), [semanticResults]);
+  const keywordResults = useMemo(() => combinedResults.filter(item => !relatedItems.has(item)), [combinedResults, relatedItems]);
+  const visibleKeywordResults = useMemo(() => compactSearchResults(keywordResults, expanded), [keywordResults, expanded]);
 
   const groupedResults = useMemo(() => {
-    const groups: Record<string, SearchItem[]> = {};
-    for (const item of visibleResults) {
-      (groups[item.category] ??= []).push(item);
+    const groups = new Map<string, SearchItem[]>();
+    for (const item of [...visibleKeywordResults, ...combinedResults.filter(item => relatedItems.has(item))]) {
+      const group = relatedItems.has(item) ? 'Ähnliche Inhalte' : item.category;
+      const items = groups.get(group) ?? [];
+      items.push(item);
+      groups.set(group, items);
     }
-    return Object.entries(groups);
-  }, [visibleResults]);
+    return [...groups];
+  }, [visibleKeywordResults, combinedResults, relatedItems]);
 
-  // Keyboard navigation must use the same order as the category groups on screen.
+  // Keyboard selection follows the same order as the displayed groups.
   const displayedResults = useMemo(() => groupedResults.flatMap(([, items]) => items), [groupedResults]);
-  useEffect(() => {
-    setSelectedIndex(index => Math.min(index, Math.max(0, displayedResults.length - 1)));
-  }, [displayedResults.length]);
+  const selectedIndex = Math.max(0, displayedResults.findIndex(item => item.id === selectedId));
+  const activeResult = displayedResults[selectedIndex];
   useEffect(() => {
     if (isOpen) listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [isOpen, selectedIndex]);
+  }, [isOpen, activeResult?.id, selectedIndex]);
 
   // reset on open
   useEffect(() => {
@@ -367,7 +378,7 @@ export default function GlobalSearch({
       setQuery('');
       setRelatedQuery(null);
       setExpanded(false);
-      setSelectedIndex(0);
+      setSelectedId(null);
       setApiResults([]);
       setSemanticResults([]);
       setTier(0);
@@ -378,7 +389,7 @@ export default function GlobalSearch({
   }, [isOpen]);
 
   useEffect(() => {
-    setSelectedIndex(0);
+    setSelectedId(null);
     setExpanded(false);
     setRelatedQuery(null);
   }, [query]);
@@ -401,9 +412,38 @@ export default function GlobalSearch({
       setTier(2);
       setApiResults([]);
 
-      const recipientRequest = messagesAPI.searchRecipients(token, query, controller.signal);
       const senderNames = readSenderNames(basePath);
+      const senderUsernames: Record<string, string> = {};
       senderNamesRef.current = senderNames;
+      const recipientRequest = messagesAPI.searchRecipients(token, query, controller.signal).then(res => {
+        if (res.success && !controller.signal.aborted) {
+          for (const person of res.results) {
+            senderUsernames[person.id] = person.username;
+            const name = person.name || person.username;
+            if (name) { senderNames[person.id] = name; senderNames[person.username] = name; }
+          }
+          setSemanticResults(previous => previous.map(item => item.senderId && senderNames[item.senderId]
+            ? { ...item, subtitle: `Von: ${htmlToText(senderNames[item.senderId])}` }
+            : item));
+        }
+        return res;
+      });
+      const headers = messagesAPI.getMessageHeaders(token, 'All', 0, controller.signal);
+      const matchingHeaders = (res: Awaited<typeof headers>): SearchItem[] => {
+        if (!res.success) return [];
+        return res.conversations.flatMap(message => {
+          const fields = messageSearchData(message, senderNames, senderUsernames);
+          if (!searchText(query, fields)) return [];
+          const sender = htmlToText(fields.sender);
+          return [{
+            id: `api-msg-${message.Uniquid || message.Id}`,
+            title: htmlToText(fields.subject) || 'Kein Betreff',
+            subtitle: sender ? `Von: ${sender}` : 'Nachricht · Absender unbekannt',
+            category: 'Nachrichten', icon: ChatBubbleLeftRightIcon,
+            href: `/messages?conversation=${encodeURIComponent(message.Uniquid || message.Id)}`,
+          }];
+        });
+      };
       const tasks: Array<Promise<SearchItem[]>> = [
         recipientRequest.then(res =>
           !res.success ? [] : res.results.filter(user => searchText(query, [user.name, user.username])).map(user => ({
@@ -413,29 +453,8 @@ export default function GlobalSearch({
             category: 'Nutzer', icon: UserIcon,
             href: `/messages?compose=1&recipient=${encodeURIComponent(user.id)}&recipientName=${encodeURIComponent(user.name || user.username)}&recipientUsername=${encodeURIComponent(user.username || '')}`,
           }))),
-        Promise.all([
-          messagesAPI.getMessageHeaders(token, 'All', 0, controller.signal),
-          recipientRequest.catch(() => null),
-        ]).then(([res, recipients]) => {
-          const senderUsernames: Record<string, string> = {};
-          for (const person of recipients?.success ? recipients.results : []) {
-            senderUsernames[person.id] = person.username;
-            const name = person.name || person.username;
-            if (name) { senderNames[person.id] = name; senderNames[person.username] = name; }
-          }
-          if (!res.success) return [];
-          return res.conversations.flatMap(message => {
-            const fields = messageSearchData(message, senderNames, senderUsernames);
-            if (!searchText(query, fields)) return [];
-            return [{
-              id: `api-msg-${message.Uniquid || message.Id}`,
-              title: htmlToText(fields.subject) || 'Kein Betreff',
-              subtitle: htmlToText(fields.sender) ? `Von: ${htmlToText(fields.sender)}` : 'Nachricht · Absender unbekannt',
-              category: 'Nachrichten', icon: ChatBubbleLeftRightIcon,
-              href: `/messages?conversation=${encodeURIComponent(message.Uniquid || message.Id)}`,
-            }];
-          });
-        }),
+        headers.then(matchingHeaders),
+        Promise.all([headers, recipientRequest]).then(([res]) => matchingHeaders(res)),
         calendarAPI.getEvents(token, {}, controller.signal).then(res =>
           !res.success ? [] : res.events.filter(event => searchText(query, event)).map(event => ({
             id: `api-ev-${event.id}`, title: event.title,
@@ -452,7 +471,7 @@ export default function GlobalSearch({
         appsAPI.getModules(token, controller.signal).then(res =>
           !res.success ? [] : res.modules.filter(module => searchText(query, module)).map(module => ({
             id: `api-mod-${module.url}`, title: module.name, subtitle: module.folders?.join(' · ') || 'Modul',
-            category: 'Module', icon: HomeIcon, href: moduleInAppHref(module, planNavigation, basePath) || '/dashboard',
+            category: 'Module', icon: HomeIcon, href: moduleInAppHref(module, planNavigation, basePath) || `${basePath}/dashboard?module=${encodeURIComponent(module.name)}`,
           }))),
         timetableAPI.getTimetable(token, controller.signal).then(res => {
           if (!res.success) return [];
@@ -498,7 +517,11 @@ export default function GlobalSearch({
       await Promise.allSettled(tasks.map(async task => {
         const results = await task;
         if (!abortedRef.current && !controller.signal.aborted) {
-          setApiResults(previous => [...previous, ...results]);
+          setApiResults(previous => {
+            const merged = new Map(previous.map(item => [item.id, item]));
+            for (const item of results) merged.set(item.id, item);
+            return [...merged.values()];
+          });
         }
       }));
 
@@ -522,43 +545,49 @@ export default function GlobalSearch({
     if (!isOpen || !token || query.length < 3 || relatedQuery !== query) {
       setSemanticResults([]);
       setSemanticLoading(false);
+      setSemanticFailed(false);
       return;
     }
 
     setSemanticResults([]);
     setSemanticLoading(true);
+    setSemanticFailed(false);
     const controller = new AbortController();
     if (semanticTimerRef.current) clearTimeout(semanticTimerRef.current);
     semanticTimerRef.current = setTimeout(async () => {
       if (abortedRef.current) return;
       try {
         const res = await searchAPI.semanticSearch(token, query, 15, controller.signal);
-        if (!abortedRef.current && !controller.signal.aborted && res.success && res.results) {
-          const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-            ChatBubbleLeftRightIcon,
-            AcademicCapIcon,
-            CalendarDaysIcon,
-            HomeIcon,
-            ClipboardDocumentListIcon,
-            UserIcon,
-            Cog6ToothIcon,
-            ClockIcon,
-            UserGroupIcon,
-          };
-          const mapped: SearchItem[] = res.results.map((r: SemanticSearchResult) => ({
+        if (abortedRef.current || controller.signal.aborted) return;
+        if (!res.success || !res.results) { setSemanticFailed(true); return; }
+        const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+          ChatBubbleLeftRightIcon,
+          AcademicCapIcon,
+          CalendarDaysIcon,
+          HomeIcon,
+          ClipboardDocumentListIcon,
+          UserIcon,
+          Cog6ToothIcon,
+          ClockIcon,
+          UserGroupIcon,
+        };
+        const mapped: SearchItem[] = res.results.map((r: SemanticSearchResult) => {
+          const label = htmlToText(r.subtitle);
+          const senderId = r.category === 'Nachrichten' ? /^(?:Von:\s*)?(\d+)$/i.exec(label)?.[1] : undefined;
+          const name = senderId ? senderNamesRef.current[senderId] : '';
+          return {
             id: r.id,
             title: r.title,
-            subtitle: r.category === 'Nachrichten' && /^(?:Von:\s*)?\d+$/i.test(r.subtitle.trim())
-              ? (senderNamesRef.current[r.subtitle.replace(/\D/g, '')] ? `Von: ${senderNamesRef.current[r.subtitle.replace(/\D/g, '')]}` : 'Nachricht · Absender unbekannt')
-              : htmlToText(r.subtitle),
+            subtitle: senderId ? (name ? `Von: ${htmlToText(name)}` : 'Nachricht · Absender unbekannt') : label,
+            senderId,
             category: r.category,
             icon: iconMap[r.icon] || MagnifyingGlassIcon,
             href: r.category === 'Module' ? moduleInAppHref({ name: r.title }, planNavigation, basePath) || r.href : r.href,
-          }));
-          setSemanticResults(mapped);
-        }
+          };
+        });
+        setSemanticResults(mapped);
       } catch {
-        // Semantic search is optional — fail silently
+        if (!controller.signal.aborted) setSemanticFailed(true);
       } finally {
         if (!controller.signal.aborted) setSemanticLoading(false);
       }
@@ -568,7 +597,7 @@ export default function GlobalSearch({
       controller.abort();
       if (semanticTimerRef.current) clearTimeout(semanticTimerRef.current);
     };
-  }, [isOpen, query, token, planNavigation, basePath, relatedQuery]);
+  }, [isOpen, query, token, planNavigation, basePath, relatedQuery, semanticAttempt]);
 
   const wasOpen = useRef(false);
   const reportedSearch = useRef(false);
@@ -607,18 +636,16 @@ export default function GlobalSearch({
   }, [onClose, navigate, basePath, query, combinedResults.length, tier, token]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
-
     const flat = displayedResults;
 
-    if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(prev => Math.max(0, Math.min(prev + 1, flat.length - 1))); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(prev => Math.max(prev - 1, 0)); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedId(flat[Math.min(selectedIndex + 1, flat.length - 1)]?.id ?? null); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedId(flat[Math.max(selectedIndex - 1, 0)]?.id ?? null); }
     else if (e.key === 'Enter') {
       e.preventDefault();
       const sel = flat[selectedIndex];
       if (sel) executeAction(sel);
     }
-  }, [onClose, displayedResults, selectedIndex, executeAction]);
+  }, [displayedResults, selectedIndex, executeAction]);
 
   if (!isOpen) return null;
 
@@ -626,34 +653,40 @@ export default function GlobalSearch({
   const showEmpty = !showLoading && (!token || tier >= 3) && query.length >= 1 && combinedResults.length === 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] sm:pt-[20vh] px-4">
-      <div className="fixed inset-0 bg-surface-950/50 backdrop-blur-md" onClick={onClose} />
-      <div className="relative w-full max-w-xl backdrop-blur-xl bg-white/80 dark:bg-surface-900/80 rounded-2xl shadow-soft-lg border border-white/30 dark:border-surface-700/40 overflow-hidden animate-scale-in" style={{ boxShadow: '0 4px 40px -8px rgba(0, 0, 0, 0.12), 0 12px 50px -12px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.5)' }}>
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-100/80 dark:border-surface-800/60">
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Suche" className="fixed inset-0 z-[100] flex items-start justify-center px-3 pt-3 sm:px-4 sm:pt-[12vh]">
+      <div aria-hidden="true" className="fixed inset-0 bg-surface-950/50 backdrop-blur-md" onClick={onClose} />
+      <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-soft-lg dark:bg-surface-900 sm:max-h-[76dvh]">
+        <div className="flex shrink-0 items-center gap-3 border-b border-surface-100 px-4 py-2 dark:border-surface-800">
           <MagnifyingGlassIcon className="h-5 w-5 text-primary-500 dark:text-primary-400 flex-shrink-0" />
           <input
             ref={inputRef}
             type="text"
             role="combobox"
             aria-label="LANIS durchsuchen"
-            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-expanded={displayedResults.length > 0}
             aria-controls="global-search-results"
             aria-activedescendant={displayedResults[selectedIndex] ? `global-search-result-${selectedIndex}` : undefined}
             autoComplete="off"
+            autoCapitalize="none"
+            data-dialog-initial-focus=""
             value={input}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Suchen..."
-            className="flex-1 bg-transparent text-surface-900 dark:text-surface-100 text-[15px] placeholder:text-surface-400 dark:placeholder:text-surface-500 focus:outline-none"
+            placeholder="Suchen"
+            className="min-h-11 min-w-0 flex-1 bg-transparent text-base text-surface-900 placeholder:text-surface-500 focus:outline-none dark:text-surface-100 dark:placeholder:text-surface-400"
           />
-          <kbd className="hidden sm:inline-flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded text-[11px] font-medium text-surface-400 bg-surface-100 dark:bg-surface-800/80 dark:text-surface-500 border border-surface-200/60 dark:border-surface-700/60">esc</kbd>
+          <button type="button" aria-label={input ? 'Suche leeren' : 'Suche schließen'} onClick={() => {
+            if (input) { setQuery(''); inputRef.current?.focus(); }
+            else onClose();
+          }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-surface-500 hover:bg-surface-100 dark:text-surface-400 dark:hover:bg-surface-800"><XMarkIcon className="h-5 w-5" /></button>
         </div>
 
-        <div ref={listRef} className="max-h-80 overflow-y-auto p-2">
+        <div ref={listRef} className="min-h-0 overflow-y-auto overscroll-contain p-2">
           {query.length === 0 && (
             <div className="py-12 text-center">
               <MagnifyingGlassIcon className="h-8 w-8 text-surface-300 dark:text-surface-600 mx-auto mb-3 opacity-60" />
-              <p className="text-sm text-surface-400 dark:text-surface-500">Tippe um die Suche zu starten</p>
+              <p className="text-sm text-surface-400 dark:text-surface-500">Seiten, Nachrichten und Unterricht</p>
             </div>
           )}
 
@@ -697,7 +730,7 @@ export default function GlobalSearch({
                       role="option"
                       tabIndex={-1}
                       aria-selected={before + idx === selectedIndex}
-                      onMouseEnter={() => setSelectedIndex(before + idx)}
+                      onMouseEnter={() => setSelectedId(item.id)}
                       onClick={() => executeAction(item)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 text-sm ${
                         before + idx === selectedIndex
@@ -721,25 +754,29 @@ export default function GlobalSearch({
 
         </div>
 
-        {query && (combinedResults.length > visibleResults.length || (token && query.length >= 3)) && (
-          <div className="flex flex-wrap items-center justify-center gap-3 px-4 py-2 border-t border-surface-100/80 dark:border-surface-800/60">
-            {combinedResults.length > visibleResults.length && !expanded && (
-              <button type="button" onClick={() => setExpanded(true)} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+        {query && (keywordResults.length > visibleKeywordResults.length || (token && query.length >= 3)) && (
+          <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 px-4 py-2 border-t border-surface-100/80 dark:border-surface-800/60">
+            {keywordResults.length > visibleKeywordResults.length && !expanded && (
+              <button type="button" onClick={() => { setExpanded(true); inputRef.current?.focus(); }} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
                 Weitere Treffer anzeigen
               </button>
             )}
-            {token && query.length >= 3 && relatedQuery !== query && (
-              <button type="button" onClick={() => setRelatedQuery(query)} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
-                Ähnliche Inhalte suchen
+            {token && query.length >= 3 && (relatedQuery !== query || semanticFailed) && (
+              <button type="button" onClick={() => {
+                setRelatedQuery(query);
+                if (semanticFailed) setSemanticAttempt(attempt => attempt + 1);
+                inputRef.current?.focus();
+              }} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+                {semanticFailed ? 'Ähnliche Suche erneut versuchen' : 'Ähnliche Inhalte suchen'}
               </button>
             )}
-            {relatedQuery === query && !semanticLoading && (
+            {relatedQuery === query && !semanticLoading && !semanticFailed && (
               <span role="status" className="text-xs text-surface-500">Suche nach ähnlichen Inhalten abgeschlossen</span>
             )}
           </div>
         )}
 
-        <div className="flex items-center justify-center gap-4 px-5 py-2 border-t border-surface-100/80 dark:border-surface-800/60 text-[11px] text-surface-400 dark:text-surface-500">
+        <div className="hidden shrink-0 items-center justify-center gap-4 px-5 py-2 sm:flex border-t border-surface-100/80 dark:border-surface-800/60 text-[11px] text-surface-400 dark:text-surface-500">
           <span className="flex items-center gap-1"><kbd className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[10px] font-medium bg-surface-100 dark:bg-surface-800/80 border border-surface-200/60 dark:border-surface-700/60">↑↓</kbd> navigieren</span>
           <span className="flex items-center gap-1"><kbd className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[10px] font-medium bg-surface-100 dark:bg-surface-800/80 border border-surface-200/60 dark:border-surface-700/60">↵</kbd> wählen</span>
           <span className="flex items-center gap-1"><kbd className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[10px] font-medium bg-surface-100 dark:bg-surface-800/80 border border-surface-200/60 dark:border-surface-700/60">esc</kbd> schließen</span>

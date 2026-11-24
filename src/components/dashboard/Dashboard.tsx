@@ -1,8 +1,12 @@
+import { isAndroid } from '../../platform/native';
 import { startExperience } from '../../analytics/experience';
+import { Select, SelectOption } from '../ui/Select';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
+import { openExternal } from '../../platform/files';
 import { DashboardModulesSkeleton } from '../shared/LoadingSkeletons';
 import { useCachedState } from '../../hooks/useCachedState';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBasePath } from '../../contexts/BasePathContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -54,6 +58,9 @@ const Dashboard: React.FC = () => {
   const { token, user } = useAuth();
   const { preferences, updatePreferences } = usePreferences();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedModule = searchParams.get('module');
+  const openedModuleRef = useRef<string | null>(null);
   const basePath = useBasePath();
   const [modules, setModules, hasModules] = useCachedState<Module[]>('modules', () => readModulesCache(user));
   const [isUpdating, setIsUpdating] = useState(false);
@@ -63,6 +70,8 @@ const Dashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFolder, setSelectedFolder] = useState<string>('all');
   const [externalModule, setExternalModule] = useState<Module | null>(null);
+  const externalDialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(Boolean(externalModule), externalDialogRef, () => setExternalModule(null));
   const viewMode = preferences.dashboard.view_mode;
   const showSearch = preferences.dashboard.show_search;
   const showSubtitle = preferences.dashboard.show_subtitle;
@@ -114,7 +123,7 @@ const Dashboard: React.FC = () => {
     if (!isEditMode && id && token) void prefetchModule(id, token, preferences);
   };
 
-  const handleModuleClick = (module: Module) => {
+  const handleModuleClick = (module: Module, confirmExternal = false) => {
     if (isEditMode) return;
     if (module.url.includes('/nachrichten.php')) {
       navigate(`${basePath}/messages`);
@@ -170,26 +179,34 @@ const Dashboard: React.FC = () => {
       navigate(`${basePath}/dsb`);
       return;
     }
-    if (basePath === '/demo') {
+    if (basePath === '/demo' || confirmExternal) {
       setExternalModule(module);
       return;
     }
-    if (module.proxy_app) {
-      if (!token) return;
-      const proxyUrl = `${API_BASE_URL}/app/${encodeURIComponent(module.name)}?token=${encodeURIComponent(token)}`;
-      window.open(proxyUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    window.open(module.direct_url || module.url, '_blank', 'noopener,noreferrer');
+    const destination = module.proxy_app
+      ? token && `${API_BASE_URL}/app/${encodeURIComponent(module.name)}?token=${encodeURIComponent(token)}`
+      : module.direct_url || module.url;
+    if (!destination) return;
+    if (isAndroid) void openExternal(destination).catch(error => console.error('Could not open module', error));
+    else window.open(destination, '_blank', 'noopener,noreferrer');
   };
 
   useEffect(() => {
+    if (!requestedModule) { openedModuleRef.current = null; return; }
+    if (isLoading || openedModuleRef.current === requestedModule) return;
+    const module = modules.find(item => item.name === requestedModule);
+    if (!module) return;
+    openedModuleRef.current = requestedModule;
+    setSearchParams(current => { const next = new URLSearchParams(current); next.delete('module'); return next; }, { replace: true });
+    // The WebView can consume a launch URL while Android’s app-lock cover is visible.
+    handleModuleClick(module, true);
+  }, [requestedModule, isLoading, modules]);
+
+  useEffect(() => {
     if (!externalModule) return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setExternalModule(null);
-    };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    const handleNativeBack = (event: Event) => { event.preventDefault(); setExternalModule(null); };
+    window.addEventListener('lanis:back', handleNativeBack, true);
+    return () => { window.removeEventListener('lanis:back', handleNativeBack, true); };
   }, [externalModule]);
 
   const externalDestination = externalModule
@@ -463,7 +480,7 @@ const Dashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => void updatePreferences({ dashboard: { show_subtitle: !showSubtitle } })}
-                className="shrink-0 rounded-lg p-1.5 text-surface-500 transition-colors hover:bg-surface-100 hover:text-primary-600 dark:text-surface-400 dark:hover:bg-surface-700 dark:hover:text-primary-400"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg md:h-auto md:w-auto md:p-1.5 text-surface-500 transition-colors hover:bg-surface-100 hover:text-primary-600 dark:text-surface-400 dark:hover:bg-surface-700 dark:hover:text-primary-400"
                 aria-label={showSubtitle ? 'Dashboard-Untertitel ausblenden' : 'Dashboard-Untertitel einblenden'}
                 aria-pressed={showSubtitle}
                 title={showSubtitle ? 'Untertitel ausblenden' : 'Untertitel einblenden'}
@@ -493,12 +510,14 @@ const Dashboard: React.FC = () => {
               <MagnifyingGlassIcon className={clsx('absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2', showSearch ? 'text-surface-400' : 'text-surface-300 dark:text-surface-600')} />
               <input
                 type="text"
+                aria-label="Module suchen"
                 placeholder={showSearch ? 'Apps und Module durchsuchen...' : 'Suche ausgeblendet'}
-                className={clsx('input w-full pl-10 text-sm', isEditMode && 'pr-12', !showSearch && 'cursor-not-allowed bg-surface-200 text-surface-500 opacity-50 dark:bg-surface-700 dark:text-surface-400')}
+                className={clsx('input w-full pl-10 text-sm [&::-webkit-search-cancel-button]:hidden', isEditMode && 'pr-12', !isEditMode && searchTerm && 'pr-12 md:pr-3', !showSearch && 'cursor-not-allowed bg-surface-200 text-surface-500 opacity-50 dark:bg-surface-700 dark:text-surface-400')}
                 value={showSearch ? searchTerm : ''}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 disabled={!showSearch}
               />
+              {!isEditMode && showSearch && searchTerm && <button type="button" aria-label="Suche leeren" onClick={() => setSearchTerm('')} className="absolute right-0 top-0 flex h-full w-11 items-center md:hidden justify-center rounded-lg text-surface-500 hover:text-surface-800 dark:text-surface-400 dark:hover:text-surface-100"><XMarkIcon className="h-4 w-4" /></button>}
               {isEditMode && (
                 <button
                   type="button"
@@ -516,18 +535,18 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
-            value={selectedFolder}
-            onChange={(e) => setSelectedFolder(e.target.value)}
-            className="hidden input text-sm flex-1 min-w-0 sm:flex-none sm:w-auto sm:max-w-[200px]"
+          <Select
+            aria-label="Ordner filtern" value={selectedFolder}
+            onValueChange={(value) => setSelectedFolder(value)}
+            className="input text-sm flex-1 min-w-0 md:hidden"
           >
-            <option value="all">Alle Ordner</option>
+            <SelectOption value="all">Alle Ordner</SelectOption>
             {folders.map((folder) => (
-              <option key={folder} value={folder}>
+              <SelectOption key={folder} value={folder}>
                 {folder}
-              </option>
+              </SelectOption>
             ))}
-          </select>
+          </Select>
 
           <div className="flex bg-surface-100 dark:bg-surface-800 rounded-lg p-0.5 flex-shrink-0">
             <button
@@ -536,9 +555,9 @@ const Dashboard: React.FC = () => {
               aria-label="Kartenansicht"
               aria-pressed={viewMode === 'grid'}
               className={clsx(
-                'p-2 rounded-md transition-all duration-200',
+                'flex h-11 w-11 items-center justify-center rounded-md transition-all duration-200 md:h-auto md:w-auto md:p-2',
                 viewMode === 'grid'
-                  ? 'bg-white dark:bg-surface-700 text-primary-600 shadow-soft'
+                  ? 'bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-soft'
                   : 'text-surface-400 dark:text-surface-400 hover:text-surface-600 dark:hover:text-surface-200'
               )}
             >
@@ -550,9 +569,9 @@ const Dashboard: React.FC = () => {
               aria-label="Listenansicht"
               aria-pressed={viewMode === 'list'}
               className={clsx(
-                'p-2 rounded-md transition-all duration-200',
+                'flex h-11 w-11 items-center justify-center rounded-md transition-all duration-200 md:h-auto md:w-auto md:p-2',
                 viewMode === 'list'
-                  ? 'bg-white dark:bg-surface-700 text-primary-600 shadow-soft'
+                  ? 'bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-soft'
                   : 'text-surface-400 dark:text-surface-400 hover:text-surface-600 dark:hover:text-surface-200'
               )}
             >
@@ -564,15 +583,16 @@ const Dashboard: React.FC = () => {
             type="button"
             onClick={() => setIsEditMode(!isEditMode)}
             className={clsx(
-              'h-9 px-3 rounded-lg transition-all duration-200 flex flex-shrink-0 items-center gap-2 text-sm font-medium',
+              'h-11 md:h-9 px-3 rounded-lg transition-all duration-200 flex flex-shrink-0 items-center gap-2 text-sm font-medium',
               isEditMode
                 ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
                 : 'bg-surface-100 dark:bg-surface-800 text-surface-400 hover:text-surface-600 dark:hover:text-surface-200'
             )}
+            aria-label={isEditMode ? 'Anpassung beenden' : 'Dashboard anpassen'}
             aria-pressed={isEditMode}
           >
             <PencilIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">{isEditMode ? 'Fertig' : 'Anpassen'}</span>
+            <span>{isEditMode ? 'Fertig' : 'Anpassen'}</span>
           </button>
         </div>
       </div>
@@ -597,14 +617,15 @@ const Dashboard: React.FC = () => {
         <div className="empty-state">
           <FolderIcon className="empty-state-icon" />
           <h3 className="empty-state-title">Keine Module gefunden</h3>
-          <p className="empty-state-text">Versuchen Sie, Ihre Suchkriterien zu ändern.</p>
+          {searchTerm && <button type="button" className="btn btn-secondary mt-4 md:hidden" onClick={() => setSearchTerm('')}>Suche zurücksetzen</button>}
+          <p className="empty-state-text hidden md:block">Versuchen Sie, Ihre Suchkriterien zu ändern.</p>
         </div>
       ) : (
         <div
           className={clsx(
             'grid gap-4',
             viewMode === 'grid'
-              ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+              ? (isEditMode ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4')
               : 'grid-cols-1'
           )}
         >
@@ -619,8 +640,8 @@ const Dashboard: React.FC = () => {
                 data-dashboard-module={module.name}
                 className={clsx(
                   'card group relative transition-[opacity,transform,box-shadow] duration-150',
-                  !isEditMode && 'card-hover',
-                  viewMode === 'grid' ? 'p-5' : 'flex items-center gap-3 p-3 sm:gap-4 sm:p-4',
+                  !isEditMode && 'card-hover cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                  viewMode === 'grid' ? 'p-3 md:p-5' : 'flex items-center gap-3 p-3 sm:gap-4 sm:p-4',
                   isEditMode && isHidden && 'opacity-50',
                   draggedModule === module.name && 'scale-[0.98] opacity-40',
                   dragSession.current?.moduleName === module.name && 'pointer-events-none'
@@ -676,7 +697,7 @@ const Dashboard: React.FC = () => {
                     )}
 
                     <ModuleIcon name={module.name} logo={module.logo} color={module.color} size="grid" />
-                    <h3 className="mt-4 text-sm font-medium text-surface-900 transition-colors group-hover:text-primary-600 dark:text-surface-100">
+                    <h3 className="mt-3 break-words text-sm font-medium md:mt-4 text-surface-900 transition-colors group-hover:text-primary-600 dark:text-surface-100 dark:group-hover:text-primary-300">
                       {module.name}
                     </h3>
                     {module.folders.length > 0 && (
@@ -688,14 +709,14 @@ const Dashboard: React.FC = () => {
                     )}
 
                     {isEditMode && (
-                      <div className="mt-4 flex w-full items-center gap-1 border-t border-surface-100 pt-3 dark:border-surface-800">
+                      <div className="mt-4 flex w-full flex-wrap items-center gap-1 border-t border-surface-100 pt-3 dark:border-surface-800">
                         <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
                             toggleHidden(module.name);
                           }}
-                          className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-surface-500 transition-colors hover:bg-surface-100 hover:text-red-600 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-red-400"
+                          className="flex min-h-11 items-center gap-1.5 rounded-lg md:h-8 md:min-h-0 px-2 text-xs font-medium text-surface-500 transition-colors hover:bg-surface-100 hover:text-red-600 dark:text-surface-400 dark:hover:bg-surface-800 dark:hover:text-red-400"
                           aria-label={isHidden ? `${module.name} einblenden` : `${module.name} ausblenden`}
                         >
                           {isHidden ? <EyeIcon className="h-4 w-4" /> : <EyeSlashIcon className="h-4 w-4" />}
@@ -766,6 +787,8 @@ const Dashboard: React.FC = () => {
 
       {externalModule && (
         <div
+          ref={externalDialogRef}
+          tabIndex={-1}
           className="fixed inset-0 z-50 flex items-center justify-center bg-surface-950/50 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setExternalModule(null);
@@ -787,14 +810,16 @@ const Dashboard: React.FC = () => {
                     Externes Modul
                   </h2>
                   <p className="mt-1 text-sm leading-5 text-surface-600 dark:text-surface-300">
-                    „{externalModule.name}“ würde eine externe Seite öffnen. In der Demo bleibt diese Seite geschlossen.
+                    {basePath === '/demo'
+                      ? `„${externalModule.name}“ würde eine externe Seite öffnen. In der Demo bleibt die Seite geschlossen.`
+                      : `„${externalModule.name}“ öffnet eine externe Seite.`}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 aria-label="Hinweis schließen"
-                className="rounded-lg p-1.5 text-surface-400 transition-colors hover:bg-surface-100 hover:text-surface-700 dark:hover:bg-surface-800 dark:hover:text-surface-200"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg md:h-auto md:w-auto md:p-1.5 text-surface-500 transition-colors hover:bg-surface-100 hover:text-surface-700 dark:hover:bg-surface-800 dark:hover:text-surface-200"
                 onClick={() => setExternalModule(null)}
               >
                 <XMarkIcon className="h-5 w-5" />
@@ -807,8 +832,11 @@ const Dashboard: React.FC = () => {
               <span className="break-all">{externalDestination}</span>
             </div>
             <div className="mt-6 flex justify-end">
-              <button type="button" className="btn btn-primary" onClick={() => setExternalModule(null)}>
-                Schließen
+              <button type="button" className="btn btn-primary" onClick={() => {
+                setExternalModule(null);
+                if (basePath !== '/demo') handleModuleClick(externalModule);
+              }}>
+                {basePath === '/demo' ? 'Schließen' : 'Modul öffnen'}
               </button>
             </div>
           </div>

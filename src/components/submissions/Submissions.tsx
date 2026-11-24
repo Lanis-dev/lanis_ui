@@ -1,5 +1,6 @@
 import { startExperience } from '../../analytics/experience';
 import { useBackNavigation } from '../../hooks/useBackNavigation';
+import { saveBlob } from '../../platform/files';
 import { useCachedState } from '../../hooks/useCachedState';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -264,14 +265,7 @@ const SubmissionDetailView: React.FC<{
     setError('');
     try {
       const blob = await coursesAPI.downloadSubmissionFile(token, fileRef);
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = name;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      await saveBlob(blob, name);
     } catch {
       setError('Die Datei konnte nicht heruntergeladen werden.');
     } finally {

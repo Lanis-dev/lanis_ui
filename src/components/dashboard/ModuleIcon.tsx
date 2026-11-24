@@ -24,7 +24,7 @@ const foregroundFor = (background: string) => {
 const sizeClasses = {
   small: 'h-10 w-10 rounded-xl',
   list: 'h-12 w-12 rounded-2xl',
-  grid: 'h-16 w-16 rounded-2xl',
+  grid: 'h-12 w-12 rounded-xl md:h-16 md:w-16 md:rounded-2xl',
 };
 
 const glyphClasses = {

@@ -1,3 +1,4 @@
+import { isAndroid } from '../../platform/native';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -198,8 +199,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ fixedSchool }) => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showSchoolDropdown]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Android WebView autofill can update the form without a React change event.
+    const nativeFields = isAndroid ? new FormData(e.currentTarget) : null;
+    const credentials = nativeFields ? {
+      ...formData,
+      username: String(nativeFields.get('username') ?? formData.username),
+      password: String(nativeFields.get('password') ?? formData.password),
+    } : formData;
     setIsLoading(true);
     setError('');
     if (fixedSchool) {
@@ -207,7 +215,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ fixedSchool }) => {
       setCookie('lastSchoolName', fixedSchool.name);
       setCookie('lastSchoolLocation', fixedSchool.location);
     }
-    const success = await login(formData);
+    const success = await login(credentials);
     if (!success) {
       setError('Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Anmeldedaten.');
     }
@@ -236,7 +244,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ fixedSchool }) => {
           </div>
 
           <noscript><p className="mb-4 text-sm">Zum Anmelden bitte JavaScript aktivieren.</p></noscript>
-          <form className="space-y-5" method="post" onSubmit={handleSubmit} autoComplete="off">
+          <form className="space-y-5" method="post" onSubmit={handleSubmit} autoComplete={isAndroid ? "on" : "off"}>
             <div className="space-y-4">
               {!fixedSchool && (
               <div className="relative">
@@ -298,7 +306,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ fixedSchool }) => {
                   required
                   className="input"
                   placeholder="vorname.nachname"
-                  value={formData.username}
+                  value={isAndroid ? undefined : formData.username}
+                  autoComplete={isAndroid ? "username" : undefined}
                   onChange={handleChange}
                 />
               </div>
@@ -315,12 +324,14 @@ const LoginForm: React.FC<LoginFormProps> = ({ fixedSchool }) => {
                     required
                     className="input pr-11"
                     placeholder="Passwort eingeben"
-                    value={formData.password}
+                    value={isAndroid ? undefined : formData.password}
+                    autoComplete={isAndroid ? "current-password" : undefined}
                     onChange={handleChange}
                   />
                   <button
                     type="button"
                     className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-surface-400 hover:text-surface-600 transition-colors"
+                    aria-label={isAndroid ? (showPassword ? "Passwort verbergen" : "Passwort anzeigen") : undefined}
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (

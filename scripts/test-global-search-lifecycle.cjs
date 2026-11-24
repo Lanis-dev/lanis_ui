@@ -67,6 +67,7 @@ const Component = load('src/components/search/GlobalSearch.tsx', name => {
   if (name.endsWith('/AuthContext')) return { useAuth: () => ({ token: 'test', user: null }) };
   if (name.endsWith('/services/api')) return api;
   if (name.endsWith('/utils/search')) return matching;
+  if (name.endsWith('/hooks/useDialogFocus')) return { useDialogFocus() {} };
   if (name.endsWith('/moduleCache')) return { readModulesCache: () => { moduleReads++; return []; } };
   if (name.endsWith('/courseNormalization')) return { normalizeCourseList: () => [] };
   if (name.endsWith('/accountDataWrites')) return { readPersonalCache: key => personalCaches[key] || null };
@@ -124,9 +125,9 @@ const result = (id, category, href) => ({ id, category, href, title: id, subtitl
   assert(!JSON.stringify(options()).includes('Von: 1724128'), 'related results also hide unresolved numeric sender IDs');
   assert(options()[0].props['aria-selected'], 'first arriving result remains selected after an empty-list arrow press');
   key('ArrowDown');
-  assert.equal(options().find(node => node.props['aria-selected']).props.children[1].props.children[0].props.children, 'sem-msg-2');
+  assert.equal(options().find(node => node.props['aria-selected']).props.children[1].props.children[0].props.children, 'sem-crs-1');
   key('Enter');
-  assert.equal(navigated.at(-1), '/demo/messages?conversation=2', 'Enter opens the highlighted row in displayed group order');
+  assert.equal(navigated.at(-1), '/demo/courses/1', 'Enter opens the highlighted row in displayed group order');
   // A slow source must not hold back results from a completed source.
   api.calendarAPI.getEvents = () => new Promise(() => {});
   api.messagesAPI.searchRecipients = async () => ({ success: true, results: [
@@ -144,7 +145,7 @@ const result = (id, category, href) => ({ id, category, href, title: id, subtitl
   // Name resolution also lets a username query match that person's messages.
   assert(options().some(node => JSON.stringify(node).includes('Von: Known Person')), 'live results resolve numeric senders');
   assert(!options().some(node => JSON.stringify(node).includes('Von: 1724128')));
-  api.messagesAPI.getMessageHeaders = async () => ({ success: true, conversations: Array.from({ length: 20 }, (_, i) => ({
+  api.messagesAPI.getMessageHeaders = async () => ({ success: true, conversations: Array.from({ length: 35 }, (_, i) => ({
     Id: String(i), Uniquid: String(i), Betreff: `Specific target ${i}`, Sender: '1724128',
   })) });
   api.messagesAPI.searchRecipients = empty;
@@ -152,7 +153,12 @@ const result = (id, category, href) => ({ id, category, href, title: id, subtitl
   assert.equal(options().length, 3, 'initial results must not flood the dialog with one category');
   const more = nodes(tree).find(node => node.type === 'button' && node.props.children === 'Weitere Treffer anzeigen');
   assert(more); more.props.onClick(); render();
-  assert.equal(options().length, 20, 'additional direct results remain available on request');
+  assert.equal(options().length, 30, 'additional direct results remain available on request');
+  related(); runTimers(); await flush();
+  semanticRequests.at(-1).resolve({ success: true, results: [result('related-extra', 'Kalender', '/calendar')] });
+  await flush();
+  assert.equal(options().length, 31, 'related results remain reachable when all 30 keyword slots are filled');
+  assert(options().some(node => JSON.stringify(node).includes('related-extra')));
   const listbox = nodes(tree).find(node => node.props?.role === 'listbox');
   const groups = listbox.props.children.flat(Infinity).filter(Boolean);
   assert(groups.every(node => node.props.role === 'group'));
@@ -192,11 +198,12 @@ const result = (id, category, href) => ({ id, category, href, title: id, subtitl
   type('closedlive'); related(); runTimers(); await flush();
   props = { ...props, isOpen: false }; render();
   assert(semanticRequests.at(-1).signal.aborted, 'closing cancels active search');
+  assert.equal(tree, null);
+  props = { ...props, isOpen: true }; render();
+  await flush();
   semanticRequests.at(-1).resolve({ success: true, results: [result('late', 'Kalender', '/calendar')] });
   closedHeaders.resolve({ success: true, conversations: [{ Id: 'late', Betreff: 'closedlive', Sender: 'Someone' }] });
   await flush();
-  assert.equal(tree, null);
-  props = { ...props, isOpen: true }; render();
   assert.equal(options().length, 0, 'closing and reopening must not restore late live results');
   console.log('Global search lifecycle checks passed: explicit related search, compact/expanded results, sender names, request races, and keyboard navigation.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,3 +1,4 @@
+import { saveBlob } from '../../platform/files';
 import { capture } from '../../analytics/client';
 import { FileStorageSkeleton } from '../shared/ModuleLoadingSkeletons';
 import { useCachedResource } from '../../hooks/useCachedResource';
@@ -215,17 +216,10 @@ const Dateispeicher: React.FC = () => {
     setDownloadError('');
     try {
       const blob = await dateispeicherAPI.downloadFile(token, file.id, controller.signal);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = file.name;
-      document.body.appendChild(link);
-      link.click();
+      await saveBlob(blob, file.name, controller.signal);
       void capture('file_download_succeeded');
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      if (axios.isCancel(err)) return;
+      if (controller.signal.aborted || axios.isCancel(err)) return;
       void capture('file_download_failed');
       setDownloadError(err instanceof Error ? err.message : 'Die Datei konnte nicht heruntergeladen werden.');
     } finally {

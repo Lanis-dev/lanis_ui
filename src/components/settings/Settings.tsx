@@ -1,5 +1,11 @@
 import BackButton from '../BackButton';
+import { TimeInput } from '../ui/TimeInput';
+import { Select, SelectOption } from '../ui/Select';
 import { ThemeColorPicker } from './ThemeColorPicker';
+import { authStorage, flushAuthStorage } from '../../platform/authStorage';
+import { saveBlob } from '../../platform/files';
+import AndroidSettings from '../android/AndroidSettings';
+import { androidPresentation } from '../../platform/native';
 import { capture } from '../../analytics/client';
 import { AnalyticsControls } from '../../analytics/Analytics';
 import React, { useState, useEffect, useRef } from 'react';
@@ -132,7 +138,7 @@ const pushSubscriptionToPayload = (subscription: PushSubscription): PushSubscrip
   };
 };
 
-type SettingsSection = 'home' | 'appearance' | 'timetable' | 'notifications' | 'navigation' | 'connections' | 'help' | 'privacy';
+type SettingsSection = 'android' | 'home' | 'appearance' | 'timetable' | 'notifications' | 'navigation' | 'connections' | 'help' | 'privacy';
 
 const settingsSections: Array<{
   id: Exclude<SettingsSection, 'home'>;
@@ -140,6 +146,7 @@ const settingsSections: Array<{
   description: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 }> = [
+  { id: 'android', title: 'Android', description: 'Navigation, App-Sperre und Unterrichtsfortschritt.', icon: DevicePhoneMobileIcon },
   {
     id: 'appearance',
     title: 'Erscheinungsbild',
@@ -185,6 +192,7 @@ const settingsSections: Array<{
 ];
 
 const sectionMeta: Record<SettingsSection, { title: string; subtitle: string }> = {
+  android: { title: 'Android', subtitle: '' },
   home: { title: 'Einstellungen', subtitle: 'Passe Lanis an deinen Schulalltag an.' },
   appearance: { title: 'Erscheinungsbild', subtitle: 'Wähle ein Design sowie Primär- und Hausaufgabenfarbe.' },
   timetable: { title: 'Stundenplan & Vertretungsplan', subtitle: 'Lege deine Klasse und deine Stundenplan-Einstellungen fest.' },
@@ -211,15 +219,8 @@ const AccountSettings: React.FC = () => {
     setError('');
     try {
       const blob = await authAPI.exportAccount(token);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'lanis-account-export.json';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setMessage('Der Export wurde heruntergeladen.');
+      await saveBlob(blob, 'lanis-account-export.json');
+      setMessage(androidPresentation ? 'Der Export kann jetzt gespeichert oder geteilt werden.' : 'Der Export wurde heruntergeladen.');
     } catch {
       setError('Der Datenexport konnte nicht erstellt werden. Bitte versuche es später erneut.');
     } finally {
@@ -237,8 +238,9 @@ const AccountSettings: React.FC = () => {
       setDeleting(false);
       return;
     }
-    const deletionGeneration = beginAccountDataDeletion(freshToken, localStorage.getItem('auth_refresh_token') || '');
+    const deletionGeneration = beginAccountDataDeletion(freshToken, authStorage.getItem('auth_refresh_token') || '');
     try {
+      await flushAuthStorage();
       const result = await authAPI.deleteAccount(freshToken);
       if (!result.success) {
         throw new Error('Die Kontolöschung wurde vom Server nicht bestätigt.');
@@ -654,7 +656,7 @@ const Settings: React.FC = () => {
   const { availability: installAvailability, canInstall, isInstalling, requestInstall } = usePwaInstall();
   const settingsRoot = `${basePath}/settings`;
   const visibleSettingsSections = settingsSections.filter(item => (
-    item.id !== 'privacy' || !isDemo
+    (item.id !== 'privacy' || !isDemo) && (item.id !== 'android' || androidPresentation)
   ));
   const requestedSection = location.pathname.slice(settingsRoot.length).split('/').filter(Boolean)[0];
   const sectionAliases: Record<string, SettingsSection> = {
@@ -746,7 +748,7 @@ const Settings: React.FC = () => {
     setNotificationError('');
     setNotificationClassSyncFailed(false);
     setNotificationMessage('');
-    if (section !== 'notifications') {
+    if (androidPresentation || section !== 'notifications') {
       setNotificationsLoading(false);
       return;
     }
@@ -1081,7 +1083,7 @@ const Settings: React.FC = () => {
           </BackButton>
         )}
         <h1 className="page-title">{sectionMeta[section].title}</h1>
-        <p className="page-subtitle">{sectionMeta[section].subtitle}</p>
+        {sectionMeta[section].subtitle && <p className="page-subtitle">{sectionMeta[section].subtitle}</p>}
       </div>
 
       {section === 'home' && <SettingsIndex basePath={basePath} sections={visibleSettingsSections} />}
@@ -1096,6 +1098,8 @@ const Settings: React.FC = () => {
           <TimetableSettings />
         </div>
       )}
+      {section === 'android' && <AndroidSettings />}
+      {section === 'notifications' && androidPresentation && <><DashboardSettings /><AndroidSettings notificationsOnly /></>}
       {section === 'navigation' && <SidebarSettings />}
       {section === 'connections' && <AgentsSettings />}
       {section === 'privacy' && <div className="space-y-6"><AnalyticsControls /><AccountSettings /></div>}
@@ -1311,7 +1315,7 @@ const Settings: React.FC = () => {
         )}
 
         {/* Push-Benachrichtigungen */}
-        {section === 'notifications' && (
+        {section === 'notifications' && !androidPresentation && (
         <>
         <DashboardSettings />
         <div className="card">
@@ -1391,46 +1395,36 @@ const Settings: React.FC = () => {
               <legend className="item-title mb-3">Aktive Zeiten</legend>
               <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <label className="label" htmlFor="notification-start">Von</label>
-                <div className="relative">
-                  <ClockIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" />
-                  <input
-                    id="notification-start"
-                    type="time"
-                    className="input pl-9 text-sm"
+                  <TimeInput
+                    id="notification-start" label="Von"
+                    className="input text-sm"
                     value={notificationPrefs.start_time}
-                    onChange={event => setNotificationPrefs(previous => ({ ...previous, start_time: event.target.value }))}
+                    onValueChange={value => setNotificationPrefs(previous => ({ ...previous, start_time: value }))}
                     disabled={notificationsLoading || notificationsSaving}
                   />
-                </div>
               </div>
               <div>
-                <label className="label" htmlFor="notification-end">Bis</label>
-                <div className="relative">
-                  <ClockIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" />
-                  <input
-                    id="notification-end"
-                    type="time"
-                    className="input pl-9 text-sm"
+                  <TimeInput
+                    id="notification-end" label="Bis"
+                    className="input text-sm"
                     value={notificationPrefs.end_time}
-                    onChange={event => setNotificationPrefs(previous => ({ ...previous, end_time: event.target.value }))}
+                    onValueChange={value => setNotificationPrefs(previous => ({ ...previous, end_time: value }))}
                     disabled={notificationsLoading || notificationsSaving}
                   />
-                </div>
               </div>
               <div>
                 <label className="label" htmlFor="notification-interval">Prüfintervall</label>
-                <select
+                <Select
                   id="notification-interval"
                   className="input text-sm"
                   value={notificationPrefs.poll_interval_minutes}
-                  onChange={event => setNotificationPrefs(previous => ({ ...previous, poll_interval_minutes: Number(event.target.value) }))}
+                  onValueChange={value => setNotificationPrefs(previous => ({ ...previous, poll_interval_minutes: Number(value) }))}
                   disabled={notificationsLoading || notificationsSaving}
                 >
                   {[5, 10, 15, 30, 60].map(minutes => (
-                    <option key={minutes} value={minutes}>{minutes} Minuten</option>
+                    <SelectOption key={minutes} value={minutes}>{minutes} Minuten</SelectOption>
                   ))}
-                </select>
+                </Select>
               </div>
               </div>
             </fieldset>}
