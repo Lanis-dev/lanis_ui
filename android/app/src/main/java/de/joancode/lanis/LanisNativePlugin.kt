@@ -269,14 +269,7 @@ class LanisNativePlugin : Plugin() {
                     val state = NativeStore.read(context).put("notificationsEnabled", false)
                     NativeStore.write(context, state)
                 }
-                runCatching {
-                    DeviceSync.unregister(context)
-                    synchronized(NativeStore.lock) {
-                        val state = NativeStore.read(context)
-                        state.remove("registeredToken")
-                        NativeStore.write(context, state)
-                    }
-                }
+                runCatching { DeviceSync.unregister(context) }
                 if (BuildConfig.PUSH_CONFIGURED) runCatching { FirebaseMessaging.getInstance().isAutoInitEnabled = false }
                 call.resolve(status())
             }
