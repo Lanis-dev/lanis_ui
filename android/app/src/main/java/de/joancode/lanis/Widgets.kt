@@ -43,6 +43,18 @@ object Widgets {
     }
     fun update(context: Context, manager: AppWidgetManager, id: Int, provider: Class<out AppWidgetProvider>) {
         val state = runCatching { NativeStore.read(context) }.getOrDefault(JSONObject())
+        fun owner(snapshot: JSONObject?): String? = snapshot?.optJSONObject("session")
+            ?.takeUnless { it.has("__lanis_account_deletion_recovery") }
+            ?.optString("auth_refresh_token")?.ifBlank { null }
+        val sessionOwner = owner(state)
+        val locked = AppLock.enabled(context)
+        fun publish(views: RemoteViews) = synchronized(NativeStore.lock) {
+            val current = runCatching { NativeStore.read(context) }.getOrNull()
+            if (owner(current) == sessionOwner && current?.optString("backend").orEmpty() == state.optString("backend")
+                && AppLock.enabled(context) == locked) {
+                manager.updateAppWidget(id, views)
+            }
+        }
         val preferences = state.optJSONObject("widgetPreferences")
         val changes = provider == ChangesWidget::class.java
         val palette = WidgetAppearance.palette(state,
@@ -70,10 +82,10 @@ object Widgets {
         val widgetHeight = manager.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, if (changes) 320 else 360)
         val now = Instant.now()
         val today = now.atZone(WidgetModel.zone).toLocalDate()
-        val signedIn = !state.optJSONObject("session")?.optString("auth_refresh_token").isNullOrEmpty()
+        val signedIn = sessionOwner != null
         val data = state.optJSONObject("timetable")
         val lessons = WidgetModel.lessons(data, changes || preferences?.optBoolean("showSubstitutions", true) != false)
-        val date = WidgetModel.schoolDay(lessons, now)
+        val date = if (changes) WidgetModel.changesDay(data, lessons, now) else WidgetModel.schoolDay(lessons, now)
         val sourceError = data?.optJSONArray("substitution_sources")?.let { sources ->
             (0 until sources.length()).any { sources.optJSONObject(it)?.optBoolean("error") == true }
         } ?: false
@@ -91,7 +103,7 @@ object Widgets {
             views.setViewVisibility(R.id.widget_detail, View.VISIBLE)
         }
         when {
-            AppLock.enabled(context) -> {
+            locked -> {
                 message("LANIS gesperrt", "Zum Entsperren tippen")
                 views.setViewVisibility(R.id.widget_refresh, View.GONE)
                 views.setViewVisibility(R.id.widget_notice, View.GONE)
@@ -122,7 +134,7 @@ object Widgets {
                 if (maxRows == 0 && totalRows > 0) {
                     views.setViewVisibility(R.id.widget_refresh, View.GONE)
                     message("Widget vergrößern", "Für deine Schriftgröße wird mehr Höhe benötigt.")
-                    manager.updateAppWidget(id, views)
+                    publish(views)
                     return
                 }
                 if (changes) {
@@ -203,7 +215,7 @@ object Widgets {
                 }
             }
         }
-        manager.updateAppWidget(id, views)
+        publish(views)
     }
 }
 

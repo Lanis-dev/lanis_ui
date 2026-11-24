@@ -216,10 +216,10 @@ const Dateispeicher: React.FC = () => {
     setDownloadError('');
     try {
       const blob = await dateispeicherAPI.downloadFile(token, file.id, controller.signal);
-      await saveBlob(blob, file.name);
+      await saveBlob(blob, file.name, controller.signal);
       void capture('file_download_succeeded');
     } catch (err) {
-      if (axios.isCancel(err)) return;
+      if (controller.signal.aborted || axios.isCancel(err)) return;
       void capture('file_download_failed');
       setDownloadError(err instanceof Error ? err.message : 'Die Datei konnte nicht heruntergeladen werden.');
     } finally {

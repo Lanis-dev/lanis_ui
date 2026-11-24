@@ -32,6 +32,8 @@ const bundle = await build({
       const [value,setValue]=useState(''), [time,setTime]=useState('08:05'), [color,setColor]=useState('#123456');
       const [modal,setModal]=useState(false), ref=useRef(null), dialog=useRef(null);
       const [searchOpen,setSearchOpen]=useState(false);
+      window.showFixtureSearch = setSearchOpen;
+      window.showFixtureModal = setModal;
       useDialogFocus(modal, ref, () => setModal(false));
       const choices=<><SelectOption value="">Alle Kategorien</SelectOption>{[
         ['alpha','Alpha'],['disabled','Nicht verfügbar'],['beta','Beta']
@@ -158,6 +160,22 @@ try {
   await page.mouse.click(4, 4);
   await page.waitForFunction(() => !document.querySelector('[role="dialog"][aria-label="Suche"]'));
   assert.equal(await page.evaluate(() => document.activeElement.id), 'open-search');
+  await page.click('#open-modal');
+  await page.evaluate(() => window.showFixtureSearch(true));
+  await page.waitForSelector('[role="dialog"][aria-label="Suche"]');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('[aria-label="Suche"][role="dialog"]'));
+  assert.ok(await page.$('[role="dialog"][aria-label="Modal"]'), 'Escape closes only the top dialog');
+  assert.equal(await page.$eval('#open-search', el => el.inert), true);
+
+  await page.evaluate(() => window.showFixtureSearch(true));
+  await page.waitForSelector('[role="dialog"][aria-label="Suche"]');
+  await page.evaluate(() => window.showFixtureModal(false));
+  await page.waitForFunction(() => !document.querySelector('[aria-label="Modal"][role="dialog"]'));
+  assert.equal(await page.$eval('#open-search', el => el.inert), true, 'Closing the lower dialog keeps the page inert');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
+  assert.equal(await page.$eval('#open-search', el => el.inert), false, 'Closing the final dialog restores the background');
   assert.equal(await page.$('input[type="time"], input[type="color"], select:not([aria-hidden="true"])'), null);
   assert.deepEqual(errors, []);
   if (!firefox) {

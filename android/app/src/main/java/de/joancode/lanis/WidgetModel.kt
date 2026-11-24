@@ -67,6 +67,19 @@ object WidgetModel {
         if (todaysLessons.isNotEmpty() && (lastEnd == null || now.isBefore(lastEnd))) return today
         return lessons.firstOrNull { it.date > today }?.date
     }
+    fun changesDay(data: JSONObject?, lessons: List<Lesson>, now: Instant): LocalDate? {
+        val schoolDate = schoolDay(lessons, now)
+        val today = now.atZone(zone).toLocalDate()
+        val days = data?.optJSONArray("days") ?: return schoolDate
+        val noticeDate = (0 until days.length()).mapNotNull { index ->
+            val day = days.optJSONObject(index) ?: return@mapNotNull null
+            val date = runCatching { LocalDate.parse(day.text("date")) }.getOrNull() ?: return@mapNotNull null
+            if (date < today || (date == today && lessons.any { it.date == today })) return@mapNotNull null
+            date.takeIf { (day.optJSONArray("substitutionNotices")?.length() ?: 0) > 0 }
+        }.minOrNull()
+        return listOfNotNull(schoolDate, noticeDate).minOrNull()
+    }
+
     fun isCurrent(lesson: Lesson, now: Instant): Boolean = !lesson.cancelled &&
         lesson.startInstant()?.let { !now.isBefore(it) } == true && lesson.endInstant()?.isAfter(now) == true
 

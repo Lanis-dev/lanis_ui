@@ -205,6 +205,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         authStorage.setItem(TOKEN_EXPIRES_KEY, expiresAt.toString());
         authStorage.setItem(USER_KEY, JSON.stringify(basicUser));
         await flushAuthStorage();
+        if (!canWriteAccountData(writeGeneration)) return false;
         setToken(response.access_token);
         setUser(basicUser);
         setIsAuthenticated(true);
@@ -299,7 +300,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
     const clearedGeneration = captureAccountDataGeneration();
     try {
-      if (clearStorage) await flushAuthStorage();
+      if (clearStorage) {
+        try { await flushAuthStorage(); }
+        catch (error) { console.warn('Could not persist local sign-out:', error); }
+      }
       if (logoutToken) {
         try {
           const registration = 'serviceWorker' in navigator

@@ -58,8 +58,9 @@ class LanisNativePlugin : Plugin() {
         }
     }
     private val executor = Executors.newSingleThreadExecutor()
-    private fun task(call: PluginCall, action: () -> Unit) {
-        executor.execute { try { action() } catch (_: Exception) { call.reject("Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es erneut.") } }
+    private val networkExecutor = Executors.newSingleThreadExecutor()
+    private fun task(call: PluginCall, queue: java.util.concurrent.Executor = executor, action: () -> Unit) {
+        queue.execute { try { action() } catch (_: Exception) { call.reject("Die Aktion konnte nicht abgeschlossen werden. Bitte versuche es erneut.") } }
     }
     private fun status(): JSObject {
         val state = NativeStore.read(context)
@@ -87,9 +88,11 @@ class LanisNativePlugin : Plugin() {
         activity.runOnUiThread {
             (activity as MainActivity).appLock.setEnabled(enabled) { success, error ->
                 if (success) {
-                    Widgets.updateAll(context)
                     if (enabled) context.getSystemService(android.app.NotificationManager::class.java).cancelAll()
-                    call.resolve(status())
+                    task(call) {
+                        Widgets.updateAll(context)
+                        call.resolve(status())
+                    }
                 } else call.reject(error ?: "Entsperren fehlgeschlagen.")
             }
         }
@@ -194,7 +197,7 @@ class LanisNativePlugin : Plugin() {
         val state = NativeStore.read(context)
         call.resolve(JSObject().put("data", state.optJSONObject("timetable")).put("updatedAt", state.optLong("lastUpdated")))
     }
-    @PluginMethod fun sync(call: PluginCall) = task(call) { DeviceSync.sync(context); call.resolve(status()) }
+    @PluginMethod fun sync(call: PluginCall) = task(call, networkExecutor) { DeviceSync.sync(context); call.resolve(status()) }
     @PluginMethod fun pinWidget(call: PluginCall) {
         val receiver = when (call.getString("kind")) {
             "next" -> TodayWidget::class.java // Compatibility with older WebView assets.
@@ -269,9 +272,11 @@ class LanisNativePlugin : Plugin() {
                     val state = NativeStore.read(context).put("notificationsEnabled", false)
                     NativeStore.write(context, state)
                 }
-                runCatching { DeviceSync.unregister(context) }
                 if (BuildConfig.PUSH_CONFIGURED) runCatching { FirebaseMessaging.getInstance().isAutoInitEnabled = false }
-                call.resolve(status())
+                task(call, networkExecutor) {
+                    runCatching { DeviceSync.unregister(context) }
+                    call.resolve(status())
+                }
             }
             return
         }
@@ -299,11 +304,15 @@ class LanisNativePlugin : Plugin() {
                     if (!state.has("pushBinding")) state.put("pushBinding", java.util.UUID.randomUUID().toString())
                     NativeStore.write(context, state)
                 }
-                DeviceSync.sync(context)
-                val state = NativeStore.read(context)
-                if (state.optString("registeredToken") != result.result || state.optString("pushError").isNotEmpty()) {
-                    call.reject("Benachrichtigungen konnten nicht beim Server registriert werden. Bitte erneut versuchen.")
-                } else call.resolve(status())
+                task(call, networkExecutor) {
+                    DeviceSync.sync(context)
+                    val state = NativeStore.read(context)
+                    if (state.optJSONObject("session")?.optString("auth_refresh_token") != owner ||
+                        !state.optBoolean("notificationsEnabled") || state.optString("registeredToken") != result.result ||
+                        state.optString("pushError").isNotEmpty()) {
+                        call.reject("Benachrichtigungen konnten nicht beim Server registriert werden. Bitte erneut versuchen.")
+                    } else call.resolve(status())
+                }
             }
         }
     }

@@ -99,9 +99,14 @@ const CustomBackend: React.FC = () => {
   const handleReset = async () => {
     setRequestState('checking');
     setMessage('Standard-Backend wird wiederhergestellt …');
-    await prepareBackendSwitch();
-    resetCustomBackendUrl();
-    window.location.replace(returnTo || '/login');
+    try {
+      await prepareBackendSwitch();
+      resetCustomBackendUrl();
+      window.location.replace(returnTo || '/login');
+    } catch (error) {
+      setRequestState('error');
+      setMessage(error instanceof Error ? error.message : 'Das Standard-Backend konnte nicht wiederhergestellt werden.');
+    }
   };
 
   return (

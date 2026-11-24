@@ -77,9 +77,9 @@ const Dateiverteilung: React.FC = () => {
     try {
       const download = await dateiverteilungAPI.downloadFile(token, file.download_url, controller.signal);
       if (controller.signal.aborted) return;
-      await saveBlob(download.blob, download.filename || file.name);
+      await saveBlob(download.blob, download.filename || file.name, controller.signal);
     } catch (cause) {
-      if (axios.isCancel(cause)) return;
+      if (controller.signal.aborted || axios.isCancel(cause)) return;
       setDownloadError(cause instanceof Error ? cause.message : 'Die Datei konnte nicht heruntergeladen werden.');
     } finally {
       if (downloadController.current === controller) {

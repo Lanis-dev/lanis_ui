@@ -21,7 +21,8 @@ export async function openExternal(url: string): Promise<void> {
   else window.open(parsed.href, '_blank', 'noopener,noreferrer');
 }
 
-export async function saveBlob(blob: Blob, filename: string): Promise<void> {
+export async function saveBlob(blob: Blob, filename: string, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
   if (!isAndroid) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -31,6 +32,7 @@ export async function saveBlob(blob: Blob, filename: string): Promise<void> {
     return;
   }
   const file = await cacheBlob(blob, filename);
+  signal?.throwIfAborted();
   await Share.share({ title: filename, url: file.uri, dialogTitle: 'Datei öffnen oder speichern' });
 }
 

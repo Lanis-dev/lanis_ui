@@ -18,16 +18,17 @@ test('notifications cannot navigate to arbitrary sites or privileged routes', ()
 import { canUseOfflineTimetable } from '../src/platform/offline';
 
 test('network failures and server outages retain the personal timetable', () => {
-  assert.equal(canUseOfflineTimetable(undefined, { plan_mode: 'personal' }, false), true);
-  assert.equal(canUseOfflineTimetable(503, { plan_mode: 'personal' }, false), true);
+  assert.equal(canUseOfflineTimetable(undefined, { view_mode: 'rolling', plan_mode: 'personal' }, false), true);
+  assert.equal(canUseOfflineTimetable(503, { view_mode: 'rolling', plan_mode: 'personal' }, false), true);
+  assert.equal(canUseOfflineTimetable(503, { view_mode: 'week', plan_mode: 'personal' }, false), false);
 });
 
 test('revocation, validation errors and alternate plans never use cached personal data', () => {
-  for (const status of [400, 401, 403, 404, 429]) assert.equal(canUseOfflineTimetable(status, { plan_mode: 'personal' }, false), false);
-  assert.equal(canUseOfflineTimetable(undefined, { plan_mode: 'all' }, false), false);
-  assert.equal(canUseOfflineTimetable(undefined, { plan_mode: 'personal', week_type: 'B' }, false), false);
-  assert.equal(canUseOfflineTimetable(undefined, { plan_mode: 'personal' }, true), false);
-  assert.equal(canUseOfflineTimetable(undefined, { plan_mode: 'personal', show_substitutions: false }, false), false);
+  for (const status of [400, 401, 403, 404, 429]) assert.equal(canUseOfflineTimetable(status, { view_mode: 'rolling', plan_mode: 'personal' }, false), false);
+  assert.equal(canUseOfflineTimetable(undefined, { view_mode: 'rolling', plan_mode: 'all' }, false), false);
+  assert.equal(canUseOfflineTimetable(undefined, { view_mode: 'rolling', plan_mode: 'personal', week_type: 'B' }, false), false);
+  assert.equal(canUseOfflineTimetable(undefined, { view_mode: 'rolling', plan_mode: 'personal' }, true), false);
+  assert.equal(canUseOfflineTimetable(undefined, { view_mode: 'rolling', plan_mode: 'personal', show_substitutions: false }, false), false);
 });
 
 import { normalizeAndroidTabs } from '../src/platform/androidNavigation';

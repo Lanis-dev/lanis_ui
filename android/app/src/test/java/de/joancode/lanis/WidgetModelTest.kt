@@ -91,6 +91,17 @@ class WidgetModelTest {
         assertTrue(WidgetModel.notices(data, java.time.LocalDate.parse("2026-11-17")).isEmpty())
     }
 
+    @Test fun changesWidgetIncludesNoticeOnlyDays() {
+        val data = JSONObject("""{"days":[
+            {"date":"2026-11-13","lessons":[],"substitutionNotices":[{"subject":"Sport","info":"Halle gesperrt"}]},
+            {"date":"2026-11-16","lessons":[{"subject":"Mathematik","period":1}]}
+        ]}""")
+        val now = java.time.Instant.parse("2026-11-13T09:00:00Z")
+        val lessons = WidgetModel.lessons(data)
+        assertEquals(java.time.LocalDate.parse("2026-11-13"), WidgetModel.changesDay(data, lessons, now))
+        assertEquals(java.time.LocalDate.parse("2026-11-16"), WidgetModel.schoolDay(lessons, now))
+    }
+
     @Test fun nullableApiFieldsNeverAppearAsLiteralNullInWidgets() {
         val lesson = WidgetModel.lessons(plan("""{"subject":"Deutsch","period":1,"room":null,"teacher":null,"info":null,
             "original_lesson":{"room":null,"teacher":null},"substitution":{"info":null}}""")).single()

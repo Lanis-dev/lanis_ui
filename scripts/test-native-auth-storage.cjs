@@ -10,8 +10,13 @@ const ts = require('typescript');
   let vault = { auth_access_token: 'access', auth_refresh_token: 'refresh' };
   let failSave = false;
   let cleared = 0;
+  let holdRead;
   const plugin = {
-    async getSession() { return { values: { ...vault }, backend: 'https://school.invalid' }; },
+    async getSession() {
+      const snapshot = { values: { ...vault }, backend: 'https://school.invalid' };
+      if (holdRead) await holdRead();
+      return snapshot;
+    },
     async saveSession({ values }) {
       await Promise.resolve();
       if (failSave) throw new Error('vault locked');
@@ -53,5 +58,15 @@ const ts = require('typescript');
   await storage.flushAuthStorage();
   assert.equal(vault.auth_access_token, 'new-account', 'Queued native sign-out must finish before a later login is persisted');
   assert.equal(storage.authStorage.getItem('auth_access_token'), 'new-account');
+  let releaseRead;
+  let readStarted;
+  const started = new Promise(resolve => { readStarted = resolve; });
+  holdRead = () => new Promise(resolve => { releaseRead = resolve; readStarted(); });
+  const reload = storage.reloadNativeCredentials();
+  await started;
+  await storage.clearNativeSession();
+  releaseRead();
+  await reload;
+  assert.equal(storage.authStorage.getItem('auth_access_token'), null, 'An in-flight reload cannot restore a signed-out account');
   console.log('Android encrypted session regression checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

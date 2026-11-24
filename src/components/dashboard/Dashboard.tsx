@@ -537,7 +537,7 @@ const Dashboard: React.FC = () => {
           <Select
             aria-label="Ordner filtern" value={selectedFolder}
             onValueChange={(value) => setSelectedFolder(value)}
-            className="hidden input text-sm flex-1 min-w-0 sm:flex-none sm:w-auto sm:max-w-[200px]"
+            className="input text-sm flex-1 min-w-0 md:hidden"
           >
             <SelectOption value="all">Alle Ordner</SelectOption>
             {folders.map((folder) => (

@@ -7,6 +7,7 @@ import { ArrowUpIcon, ArrowDownIcon, XMarkIcon, ArrowTopRightOnSquareIcon, BellI
 import { ANDROID_TAB_IDS, DEFAULT_ANDROID_TABS, useAndroidTabs } from '../../platform/androidNavigation';
 import { getSidebarLabel } from '../../utils/sidebarNavigation';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePreferences } from '../../contexts/PreferencesContext';
 import { notificationsAPI } from '../../services/api';
 import { isAndroid, LanisNative, type DeviceStatus } from '../../platform/native';
 import type { NotificationPreferences } from '../../types';
@@ -17,6 +18,13 @@ const defaults: NotificationPreferences = { enabled: false, messages_enabled: tr
 
 export default function AndroidSettings({ notificationsOnly = false }: { notificationsOnly?: boolean }) {
   const { token } = useAuth();
+  const { preferences } = usePreferences();
+  const selectedClass = preferences.vertretungsplan.class_override.trim();
+  const withSelectedClass = (next: NotificationPreferences): NotificationPreferences => ({
+    ...next,
+    vertretungsplan_class_mode: selectedClass ? 'selected' : 'own',
+    vertretungsplan_classes: selectedClass ? [selectedClass] : [],
+  });
   const [tabs, setTabs] = useAndroidTabs();
   const nativeAvailable = isAndroid && !window.location.pathname.startsWith('/demo');
   const [status, setStatus] = useState<DeviceStatus | null>(null);
@@ -67,16 +75,20 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
   };
 
   const enableNotifications = async (enabled: boolean) => {
+    if (!enabled) setStatus(await LanisNative.setNotifications({ enabled: false }));
     if (!token) return;
     if (enabled && !prefs.messages_enabled && !prefs.vertretungsplan_enabled) throw new Error('Wähle mindestens eine Benachrichtigungsart.');
     // Persist categories first so device registration can't create unexpected alerts.
-    const next = { ...prefs, enabled };
+    const next = withSelectedClass({ ...prefs, enabled });
     const response = await notificationsAPI.updatePreferences(token, next);
     if (!response.success) throw new Error('Die Benachrichtigungen konnten nicht gespeichert werden.');
     setPrefs(response.preferences);
     try {
-      const result = await LanisNative.setNotifications({ enabled }); setStatus(result);
-      if (enabled && !result.notificationsAllowed) throw new Error('Erlaube Benachrichtigungen in den Android-Einstellungen.');
+      if (enabled) {
+        const result = await LanisNative.setNotifications({ enabled: true });
+        setStatus(result);
+        if (!result.notificationsAllowed) throw new Error('Erlaube Benachrichtigungen in den Android-Einstellungen.');
+      }
       setMessage(enabled ? 'Benachrichtigungen aktiviert.' : 'Benachrichtigungen deaktiviert.');
     } catch (error) {
       if (enabled) {
@@ -87,6 +99,7 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
     }
   };
 
+  const deviceNotificationsEnabled = Boolean(status?.notificationsEnabled);
   const buttonClass = 'btn btn-secondary inline-flex min-h-11 items-center justify-center gap-2 disabled:opacity-50';
   return <div className="space-y-6">
     {!notificationsOnly && <section id="navigation" className="card scroll-mt-6">
@@ -144,12 +157,12 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
 
     <section className="card"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary-50 p-2.5 text-primary-600 dark:bg-primary-950 dark:text-primary-400"><BellIcon className="h-5 w-5" /></div><div className="min-w-0 flex-1"><h2 className="section-title break-words">Benachrichtigungen</h2><p className="mt-1 text-sm text-surface-500 dark:text-surface-400">Nachrichten und Vertretungen direkt auf deinem Handy.</p></div></div>
       {nativeAvailable && loaded && (!serverPush || !status?.pushConfigured) && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">Benachrichtigungen sind noch nicht eingerichtet.</p>}
-      <div className="mt-5 flex items-center justify-between gap-4 border-b border-surface-200 pb-4 dark:border-surface-700"><p className="text-sm font-medium">Auf diesem Gerät aktivieren</p><SettingsSwitch label="Benachrichtigungen aktivieren" checked={Boolean(prefs.enabled && status?.notificationsEnabled)} disabled={busy || !loaded || !serverPush || !status?.pushConfigured} onChange={() => void run(() => enableNotifications(!(prefs.enabled && status?.notificationsEnabled)))} /></div>
+      <div className="mt-5 flex items-center justify-between gap-4 border-b border-surface-200 pb-4 dark:border-surface-700"><p className="text-sm font-medium">Auf diesem Gerät aktivieren</p><SettingsSwitch label="Benachrichtigungen aktivieren" checked={deviceNotificationsEnabled} disabled={busy || (!deviceNotificationsEnabled && (!loaded || !serverPush || !status?.pushConfigured))} onChange={() => void run(() => enableNotifications(!deviceNotificationsEnabled))} /></div>
       <div className="mt-4 space-y-4">{([{ key: 'messages_enabled', label: 'Neue Nachrichten' }, { key: 'vertretungsplan_enabled', label: 'Vertretungen' }, { key: 'show_preview', label: 'Inhaltsvorschau' }] as const).map(({ key, label }) => <div key={key} className="flex min-h-11 items-center justify-between gap-4 text-sm text-surface-800 dark:text-surface-200"><span>{label}</span><SettingsSwitch label={label} disabled={busy || !loaded} checked={prefs[key]} onChange={() => setPrefs(current => ({ ...current, [key]: !current[key] }))} /></div>)}
         <p className="text-sm font-medium">Benachrichtigungszeiten</p>
         <div className="grid grid-cols-2 gap-3"><div className="min-w-0 text-xs text-surface-500">Ab<TimeInput aria-label="Benachrichtigungen ab" className="input mt-1 w-full min-w-0" value={prefs.start_time} disabled={busy || !loaded} onValueChange={value => setPrefs({ ...prefs, start_time: value })} /></div><div className="min-w-0 text-xs text-surface-500">Bis<TimeInput aria-label="Benachrichtigungen bis" className="input mt-1 w-full min-w-0" value={prefs.end_time} disabled={busy || !loaded} onValueChange={value => setPrefs({ ...prefs, end_time: value })} /></div></div>
         <p className="text-xs text-surface-500">{prefs.timezone} · Prüfung alle {prefs.poll_interval_minutes} Min.</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><button className="btn btn-primary min-h-11 disabled:opacity-50" disabled={busy || !loaded || !token} onClick={() => void run(async () => { const result = await notificationsAPI.updatePreferences(token!, prefs); if (!result.success) throw new Error('Einstellungen konnten nicht gespeichert werden.'); setPrefs(result.preferences); setMessage('Einstellungen gespeichert.'); })}>Speichern</button>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><button className="btn btn-primary min-h-11 disabled:opacity-50" disabled={busy || !loaded || !token} onClick={() => void run(async () => { const result = await notificationsAPI.updatePreferences(token!, withSelectedClass(prefs)); if (!result.success) throw new Error('Einstellungen konnten nicht gespeichert werden.'); setPrefs(result.preferences); setMessage('Einstellungen gespeichert.'); })}>Speichern</button>
         <button className={buttonClass} disabled={busy || !loaded || !prefs.enabled || !status?.notificationsEnabled || !status.notificationsAllowed} onClick={() => void run(async () => { const result = await notificationsAPI.sendTest(token!); if (!result.success) throw new Error('Test konnte nicht gesendet werden.'); setMessage('Testbenachrichtigung gesendet.'); })}>Test senden</button></div>
         <button className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary-600 disabled:opacity-50 dark:text-primary-400" disabled={!nativeAvailable} onClick={() => void run(() => LanisNative.openNotificationSettings())}><ArrowTopRightOnSquareIcon className="h-4 w-4" />Android-Einstellungen</button>
       </div>

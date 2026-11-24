@@ -5,9 +5,11 @@ let values: NativeSession = {};
 let writes: Promise<void> = Promise.resolve();
 let persistenceError: unknown;
 let backend = '';
+let revision = 0;
 
 export async function restoreNativeSession(apiBaseUrl: string): Promise<void> {
   if (!isAndroid) return;
+  revision++;
   backend = apiBaseUrl;
   const restored = await LanisNative.getSession();
   if (restored.backend && restored.backend !== apiBaseUrl) {
@@ -19,6 +21,7 @@ export async function restoreNativeSession(apiBaseUrl: string): Promise<void> {
 }
 
 function persist(): void {
+  revision++;
   const snapshot = { ...values };
   writes = writes.then(async () => {
     try {
@@ -51,6 +54,7 @@ export async function flushAuthStorage(): Promise<void> {
 
 export async function clearNativeSession(preserveDeletionRecovery = false): Promise<void> {
   if (!isAndroid) return;
+  revision++;
   const recoveryKey = '__lanis_account_deletion_recovery';
   const recovery = preserveDeletionRecovery ? values[recoveryKey] : undefined;
   values = recovery ? { [recoveryKey]: recovery } : {};
@@ -66,5 +70,10 @@ export async function clearNativeSession(preserveDeletionRecovery = false): Prom
 }
 
 export async function reloadNativeCredentials(): Promise<void> {
-  if (isAndroid) { await writes; values = (await LanisNative.getSession()).values; }
+  if (!isAndroid) return;
+  const startedAt = revision;
+  await flushAuthStorage();
+  if (startedAt !== revision) return;
+  const restored = await LanisNative.getSession();
+  if (startedAt === revision) values = restored.values;
 }
