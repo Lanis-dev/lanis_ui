@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { webcrypto } = require('node:crypto');
 const ts = require('typescript');
 
 // Run the real storage lifecycle module against browser APIs with injected
@@ -22,10 +23,11 @@ const context = {
     if (name === '../platform/authStorage') return { authStorage: storage, async flushAuthStorage() {} };
     if (name === './resourceCache') return resourceCache;
     assert.equal(name, './backendConfig');
-    return { CUSTOM_BACKEND_STORAGE_KEY: 'lanis_custom_backend_url', clearBackendScopedStorage() {} };
+    return { CUSTOM_BACKEND_STORAGE_KEY: 'lanis_custom_backend_url', async clearBackendScopedStorage() {} };
   },
   localStorage: storage,
-  window: { localStorage: storage, addEventListener() {}, setInterval() { return 1; }, clearInterval() {} },
+  crypto: webcrypto,
+  window: { localStorage: storage, addEventListener() {}, setTimeout, setInterval() { return 1; }, clearInterval() {} },
   navigator: {},
   console,
 };
@@ -85,5 +87,51 @@ const lifecycle = exportsObject;
   assert.equal(storage.getItem(lifecycle.ACCOUNT_DATA_DELETION_RECOVERY_KEY), null);
   assert(!lifecycle.canWriteAccountData(generation), 'Finishing invalidates writers from the deletion epoch');
   assert(lifecycle.canWriteAccountData(lifecycle.captureAccountDataGeneration()));
+  // Exercise the real login callback with the real generation lifecycle and a
+  // controllable native persistence boundary.
+  values.clear();
+  let beforeFlush;
+  const revoked = [];
+  const provider = {};
+  const authSource = fs.readFileSync(path.join(__dirname, '../src/contexts/AuthContext.tsx'), 'utf8')
+    .replace('import.meta.env.SSR', 'true');
+  vm.runInNewContext(ts.transpileModule(authSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText, {
+    ...context,
+    exports: provider,
+    require(name) {
+      if (name === 'react') return {
+        createContext: () => ({ Provider: 'Provider' }),
+        useState: initial => [initial, () => {}],
+        useEffect() {},
+        useCallback: callback => callback,
+      };
+      if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
+      if (name === '../utils/accountDataWrites') return lifecycle;
+      if (name === '../utils/resourceCache') return resourceCache;
+      if (name === '../utils/backendConfig') return { getApiBaseUrl: () => 'https://example.invalid' };
+      if (name === '../analytics/client') return { capture: async () => {}, configureAccountAnalytics() {} };
+      if (name === '../platform/authStorage') return {
+        authStorage: storage,
+        async flushAuthStorage() { beforeFlush?.(); },
+      };
+      if (name === '../services/api') return { authAPI: {
+        async login() {
+          return { access_token: 'new-session', refresh_token: 'new-refresh', expires_in: 60,
+            username: 'test-user', school_id: '1234', encryption_ready: true };
+        },
+        async getUserProfile() { return { success: true, data: {} }; },
+        async logout(token) { revoked.push(token); },
+      } };
+      throw Error(`Unexpected import: ${name}`);
+    },
+  });
+  const { login } = provider.AuthProvider({}).props.value;
+  assert.equal(await login({}), true, 'login publishes against the generation created by its storage commit');
+  assert.deepEqual(revoked, []);
+  beforeFlush = () => lifecycle.clearSignedOutAccountData();
+  assert.equal(await login({}), false, 'a sign-out during persistence still invalidates login');
+  assert.deepEqual(revoked, ['new-session']);
   console.log('Account data lifecycle regression checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -200,6 +200,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const loginPublished = await withAccountDataLifecycleLock(async () => {
         if (!canWriteAccountData(writeGeneration)) return false;
         if (!completeAccountDataDeletion(writeGeneration)) return false;
+        writeGeneration = captureAccountDataGeneration();
         authStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
         authStorage.setItem(REFRESH_TOKEN_KEY, response.refresh_token);
         authStorage.setItem(TOKEN_EXPIRES_KEY, expiresAt.toString());
@@ -213,7 +214,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return true;
       });
 
-      if (!loginPublished) {
+      if (!loginPublished || !canWriteAccountData(writeGeneration)) {
         try {
           await authAPI.logout(response.access_token);
         } catch {
@@ -223,7 +224,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
       configureAccountAnalytics(response.access_token, getApiBaseUrl(), `${response.school_id}:${response.username.toLowerCase()}`, authAPI.getValidSessionToken);
       void capture('login_succeeded');
-      writeGeneration = captureAccountDataGeneration();
 
       try {
         const userResponse = await authAPI.getUserProfile(response.access_token);

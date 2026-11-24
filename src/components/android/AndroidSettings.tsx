@@ -43,7 +43,7 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
     if (native.status === 'rejected') throw native.reason;
     const device = native.value;
     setStatus(device);
-    if (remote.status === 'fulfilled') {
+    if (remote.status === 'fulfilled' && remote.value[1].success) {
       const [config, preferences] = remote.value;
       setServerPush(config.configured); setPrefs(preferences.preferences); setLoaded(true);
     } else {
@@ -75,8 +75,11 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
   };
 
   const enableNotifications = async (enabled: boolean) => {
-    if (!enabled) setStatus(await LanisNative.setNotifications({ enabled: false }));
-    if (!token) return;
+    if (!enabled) {
+      setStatus(await LanisNative.setNotifications({ enabled: false }));
+      setMessage('Benachrichtigungen auf diesem Gerät deaktiviert.');
+    }
+    if (!token || !loaded) return;
     if (enabled && !prefs.messages_enabled && !prefs.vertretungsplan_enabled) throw new Error('Wähle mindestens eine Benachrichtigungsart.');
     // Persist categories first so device registration can't create unexpected alerts.
     const next = withSelectedClass({ ...prefs, enabled });
