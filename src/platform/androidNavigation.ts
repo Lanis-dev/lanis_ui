@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 const KEY = 'lanis_android_navigation';
+const SHOW_LABELS_KEY = 'lanis_android_navigation_show_labels';
 const EVENT = 'lanis:android-navigation';
 export const DEFAULT_ANDROID_TABS = ['dashboard', 'timetable', 'messages', 'courses'];
 export const ANDROID_TAB_IDS = ['dashboard', 'timetable', 'messages', 'courses', 'calendar', 'study-groups', 'dateispeicher', 'dateiverteilung', 'videokonferenz', 'vertretungsplan', 'dsb', 'wahlen', 'profile', 'settings', 'search'];
@@ -21,6 +22,16 @@ export function useAndroidTabs(): [string[], (tabs: string[]) => void] {
   try { parsed = JSON.parse(stored); } catch { parsed = null; }
   return [normalizeAndroidTabs(parsed), tabs => {
     localStorage.setItem(KEY, JSON.stringify(normalizeAndroidTabs(tabs)));
+    window.dispatchEvent(new Event(EVENT));
+  }];
+}
+
+function showLabelsSnapshot() { return localStorage.getItem(SHOW_LABELS_KEY) !== 'false'; }
+
+export function useAndroidTabLabels(): [boolean, (showLabels: boolean) => void] {
+  const showLabels = useSyncExternalStore(subscribe, showLabelsSnapshot);
+  return [showLabels, value => {
+    localStorage.setItem(SHOW_LABELS_KEY, String(value));
     window.dispatchEvent(new Event(EVENT));
   }];
 }

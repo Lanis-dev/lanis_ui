@@ -158,7 +158,10 @@ async function notificationToggle({ accountEnabled, deviceEnabled, registrationF
       if (name === '@capacitor/app') return { App: { addListener: async () => ({ remove() {} }) } };
       if (name.endsWith('/AuthContext')) return { useAuth: () => ({ token: 'test' }) };
       if (name.endsWith('/PreferencesContext')) return { usePreferences: () => ({ preferences: { vertretungsplan: { class_override: '' } } }) };
-      if (name.endsWith('/androidNavigation')) return { useAndroidTabs: () => [[], () => {}] };
+      if (name.endsWith('/androidNavigation')) return {
+        useAndroidTabs: () => [[], () => {}],
+        useAndroidTabLabels: () => [true, () => {}],
+      };
       if (name.endsWith('/SettingsSwitch')) return { default: 'SettingsSwitch' };
       if (name.endsWith('/native')) return { isAndroid: true, LanisNative: {
         async getStatus() { return { pushConfigured: true, notificationsEnabled: deviceEnabled }; },

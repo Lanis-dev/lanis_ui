@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { App } from '@capacitor/app';
 import { toggleLessonProgress } from '../../platform/lessonProgress';
 import { ArrowUpIcon, ArrowDownIcon, XMarkIcon, ArrowTopRightOnSquareIcon, BellIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
-import { ANDROID_TAB_IDS, DEFAULT_ANDROID_TABS, useAndroidTabs } from '../../platform/androidNavigation';
+import { ANDROID_TAB_IDS, DEFAULT_ANDROID_TABS, useAndroidTabLabels, useAndroidTabs } from '../../platform/androidNavigation';
 import { getSidebarLabel } from '../../utils/sidebarNavigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePreferences } from '../../contexts/PreferencesContext';
@@ -26,6 +26,7 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
     vertretungsplan_classes: selectedClass ? [selectedClass] : [],
   });
   const [tabs, setTabs] = useAndroidTabs();
+  const [showLabels, setShowLabels] = useAndroidTabLabels();
   const nativeAvailable = isAndroid && !window.location.pathname.startsWith('/demo');
   const [status, setStatus] = useState<DeviceStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -113,6 +114,10 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
     {!notificationsOnly && <section id="navigation" className="card scroll-mt-6">
       <h2 className="text-base font-semibold">Navigationsleiste</h2>
       <p className="mt-1 text-sm text-surface-500">Wähle deine Verknüpfungen und ihre Reihenfolge.</p>
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <p className="text-sm font-medium">Beschriftungen anzeigen</p>
+        <SettingsSwitch label="Beschriftungen anzeigen" checked={showLabels} onChange={() => setShowLabels(!showLabels)} />
+      </div>
       <div className="mt-5 space-y-3">{tabs.map((tab, index) => <div key={tab} className="flex items-center gap-1.5">
         <label className="min-w-0 flex-1"><span className="sr-only">Verknüpfung {index + 1}</span>
           <Select className="input w-full min-w-0" value={tab} onValueChange={value => {
@@ -129,7 +134,10 @@ export default function AndroidSettings({ notificationsOnly = false }: { notific
       </div>)}</div>
       {tabs.length < ANDROID_TAB_IDS.length && <label className="mt-4 block text-sm font-medium">Verknüpfung hinzufügen<Select className="input mt-1.5" value="" onValueChange={value => { if (value) setTabs([...tabs, value]); }}><SelectOption value="" disabled>Bereich auswählen …</SelectOption>{ANDROID_TAB_IDS.filter(id => !tabs.includes(id)).map(id => <SelectOption key={id} value={id}>{getSidebarLabel(id)}</SelectOption>)}</Select></label>}
       {!tabs.length && <p role="status" className="mt-3 text-sm text-surface-500">Leiste ausgeblendet. Alle Bereiche findest du im Menü.</p>}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-surface-500">Auf diesem Gerät gespeichert.</p><button type="button" className="btn btn-secondary shrink-0" onClick={() => setTabs(DEFAULT_ANDROID_TABS)}>Zurücksetzen</button></div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-surface-500">Auf diesem Gerät gespeichert.</p><button type="button" className="btn btn-secondary shrink-0" onClick={() => {
+        setTabs(DEFAULT_ANDROID_TABS);
+        setShowLabels(true);
+      }}>Zurücksetzen</button></div>
     </section>}
     {!nativeAvailable && <p role="status" className="rounded-2xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-900 dark:border-primary-800 dark:bg-primary-950 dark:text-primary-200">Vorschau · Geräteeinstellungen sind in der Android-App verfügbar.</p>}
     {error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{error}<button className="ml-2 underline" disabled={busy} onClick={() => void run(load)}>Erneut versuchen</button></div>}
