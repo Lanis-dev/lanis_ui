@@ -631,80 +631,75 @@ const Courses: React.FC = () => {
     </div>
   );
 
+  const historyControl = 'inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500';
+  const historyControlIdle = 'text-surface-700 hover:bg-surface-100 dark:text-surface-300 dark:hover:bg-surface-700';
+  const historyControlActive = 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200';
+
   const courseFilters = (
-              <div className="card">
-                <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <div className="flex items-center gap-1.5">
-                  <FunnelIcon className="h-3.5 w-3.5 text-surface-500 dark:text-surface-400" />
-                  <span className="text-xs font-medium text-surface-700 dark:text-surface-300 hidden sm:inline">Filter:</span>
-                </div>
+    <div className="flex flex-wrap items-center justify-between gap-2" role="group" aria-label="Historienansicht">
+      <div className="flex min-w-0 flex-[1_1_12.5rem] items-center gap-2">
+        <Select
+          aria-label="Anwesenheit filtern"
+          value={filterAttendance}
+          onValueChange={(value) => setFilterAttendance(value)}
+          className="h-11 min-w-0 flex-1 px-2.5 text-sm"
+        >
+          <SelectOption value="all">Alle Einträge</SelectOption>
+          <SelectOption value="anwesend">Anwesend</SelectOption>
+          <SelectOption value="entschuldigt">Entschuldigt</SelectOption>
+          <SelectOption value="unentschuldigt">Unentschuldigt</SelectOption>
+          <SelectOption value="fehlend">Fehlend</SelectOption>
+          {dynamicAttendanceOptions.map((option) => (
+            <SelectOption key={option} value={option}>{option}</SelectOption>
+          ))}
+        </Select>
+        <button
+          type="button"
+          aria-label="Nur Hausaufgaben"
+          aria-pressed={showOnlyHomework}
+          onClick={() => {
+            void capture('course_filter_changed', { homework_only: !showOnlyHomework });
+            setShowOnlyHomework(!showOnlyHomework);
+          }}
+          className={clsx(historyControl, 'whitespace-nowrap border border-surface-200 px-2.5 dark:border-surface-700', showOnlyHomework ? historyControlActive : historyControlIdle)}
+        >
+          Nur HA
+        </button>
+      </div>
 
-                <Select
-                  aria-label="Anwesenheit filtern" value={filterAttendance}
-                  onValueChange={(value) => setFilterAttendance(value)}
-                  className="text-xs sm:text-sm border border-surface-300 dark:border-surface-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 min-w-0"
-                >
-                  <SelectOption value="all">Alle Einträge</SelectOption>
-                  <SelectOption value="anwesend">Anwesend</SelectOption>
-                  <SelectOption value="entschuldigt">Entschuldigt</SelectOption>
-                  <SelectOption value="unentschuldigt">Unentschuldigt</SelectOption>
-                  <SelectOption value="fehlend">Fehlend</SelectOption>
-                  {dynamicAttendanceOptions.map((option) => (
-                    <SelectOption key={option} value={option}>{option}</SelectOption>
-                  ))}
-                </Select>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          aria-label={sortOrder === 'newest' ? 'Neueste zuerst, Reihenfolge umkehren' : 'Älteste zuerst, Reihenfolge umkehren'}
+          onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
+          className={clsx(historyControl, historyControlIdle, 'min-w-11 px-2.5')}
+        >
+          {sortOrder === 'newest' ? '↓ Neu' : '↑ Alt'}
+        </button>
 
-                <button
-                  onClick={() => { void capture('course_filter_changed', { homework_only: !showOnlyHomework }); setShowOnlyHomework(!showOnlyHomework); }}
-                  className={clsx(
-                    "text-xs sm:text-sm px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap",
-                    showOnlyHomework
-                      ? "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-700"
-                      : "bg-surface-200 dark:bg-surface-700 text-surface-600 dark:text-surface-400 border border-surface-300 dark:border-surface-600 hover:bg-surface-200 dark:hover:bg-surface-700"
-                  )}
-                >
-                  {showOnlyHomework ? '✓ ' : ''}Nur HA
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
-                  className="text-xs sm:text-sm px-2.5 py-1.5 rounded-lg bg-surface-200 dark:bg-surface-700 text-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors border border-surface-300 dark:border-surface-600 whitespace-nowrap"
-                >
-                  {sortOrder === 'newest' ? '↓ Neu' : '↑ Alt'}
-                </button>
-
-                <div className="flex border border-surface-300 dark:border-surface-600 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => { if (detailViewMode !== 'cards') void capture('course_view_changed', { view: 'cards' }); setDetailViewMode('cards'); }}
-                    className={clsx(
-                      "p-2 transition-colors",
-                      detailViewMode === 'cards'
-                        ? "bg-primary-600 text-white"
-                        : "bg-surface-50 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700"
-                    )}
-                    title="Kartenansicht"
-                  >
-                    <Squares2X2Icon className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => { if (detailViewMode !== 'timeline') void capture('course_view_changed', { view: 'timeline' }); setDetailViewMode('timeline'); }}
-                    className={clsx(
-                      "p-2 transition-colors",
-                      detailViewMode === 'timeline'
-                        ? "bg-primary-600 text-white"
-                        : "bg-surface-50 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700"
-                    )}
-                    title="Timeline-Ansicht"
-                  >
-                    <ListBulletIcon className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-            </div>
+        <div className="flex rounded-lg bg-surface-100 dark:bg-surface-800" role="group" aria-label="Darstellung">
+          {([
+            { mode: 'cards', label: 'Kartenansicht', Icon: Squares2X2Icon },
+            { mode: 'timeline', label: 'Timeline-Ansicht', Icon: ListBulletIcon },
+          ] as const).map(({ mode, label, Icon }) => (
+            <button
+              key={mode}
+              type="button"
+              aria-label={label}
+              aria-pressed={detailViewMode === mode}
+              title={label}
+              onClick={() => {
+                if (detailViewMode !== mode) void capture('course_view_changed', { view: mode });
+                setDetailViewMode(mode);
+              }}
+              className={clsx(historyControl, 'w-11', detailViewMode === mode ? historyControlActive : historyControlIdle)}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 
   return (
