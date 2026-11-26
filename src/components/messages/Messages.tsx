@@ -184,6 +184,10 @@ const Messages: React.FC = () => {
     activeConversation.current = selectedConversation ? { id: selectedConversation, token } : null;
     const abortController = new AbortController();
     loadMessages(abortController.signal);
+    // The URL effect reloads deep-linked conversations with the new token.
+    if (!searchParams.get('conversation') && selectedConversation && isConversationLoading) {
+      void loadConversation(selectedConversation);
+    }
     return () => {
       abortController.abort();
       activeConversation.current = null;
@@ -554,6 +558,7 @@ const Messages: React.FC = () => {
                     onClick={() => {
                       activeConversation.current = null;
                       conversationRequest.current++;
+                      setIsConversationLoading(false);
                       setSelectedConversation(null);
                     }}
                     className="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
