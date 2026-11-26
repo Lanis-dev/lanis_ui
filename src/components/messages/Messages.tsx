@@ -65,7 +65,7 @@ const Messages: React.FC = () => {
     } catch { return []; }
   });
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
-  const activeConversation = useRef<string | null>(null);
+  const activeConversation = useRef<{ id: string; token: string } | null>(null);
   const [conversations, setConversations] = useCachedState<Record<string, Message[]>>('conversations', {});
   const conversationMessages = selectedConversation ? conversations[selectedConversation] || [] : [];
   const [isLoading, setIsLoading] = useState(true);
@@ -181,6 +181,7 @@ const Messages: React.FC = () => {
 
   useEffect(() => {
     if (!token) return;
+    activeConversation.current = selectedConversation ? { id: selectedConversation, token } : null;
     const abortController = new AbortController();
     loadMessages(abortController.signal);
     return () => {
@@ -264,7 +265,7 @@ const Messages: React.FC = () => {
     if (inbox.current?.getClientRects().length) inboxScroll.current = inbox.current.scrollTop;
     try {
       setIsConversationLoading(conversations[conversationId] === undefined);
-      activeConversation.current = conversationId;
+      activeConversation.current = { id: conversationId, token };
       setSelectedConversation(conversationId);
       const response = await messagesAPI.getConversation(token, conversationId);
       if (requestId !== conversationRequest.current) return;
@@ -396,7 +397,10 @@ const Messages: React.FC = () => {
           delete next[selectedConversation];
           return next;
         });
-        if (activeConversation.current === selectedConversation) await loadConversation(selectedConversation);
+        const active = activeConversation.current;
+        if (active?.id === selectedConversation && active.token === token) {
+          await loadConversation(selectedConversation);
+        }
       } else {
         setReplyError(failure);
       }
