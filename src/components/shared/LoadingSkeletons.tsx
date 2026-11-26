@@ -1,5 +1,5 @@
 import React from 'react';
-import { AcademicCapIcon, UserIcon } from '@heroicons/react/24/outline';
+import { AcademicCapIcon } from '@heroicons/react/24/outline';
 
 const Block: React.FC<{ className: string }> = ({ className }) => (
   <div aria-hidden="true" className={`skeleton max-w-full ${className}`} />
@@ -27,9 +27,10 @@ export const MessagesListSkeleton: React.FC = () => (
   <div aria-busy="true" aria-label="Nachrichten werden geladen">
       <div aria-hidden="true" className="flex-1 overflow-hidden divide-y divide-surface-100 dark:divide-surface-800">
         {Array.from({ length: 8 }, (_, i) => (
-          <div key={i} className="px-4 py-3 flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full shrink-0 bg-surface-100 dark:bg-surface-700 flex items-center justify-center"><UserIcon className="h-4 w-4 text-surface-400" /></div>
-            <div className="flex-1 min-w-0"><Block className="h-5 w-4/5" /><Block className="mt-0.5 h-4 w-1/2" /></div>
+          <div key={i} className="grid grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-2.5 border-l-[3px] border-transparent px-3 py-3">
+            <span />
+            <div className="min-w-0"><Block className="h-5 w-4/5" /><Block className="mt-0.5 h-4 w-1/2" /></div>
+            <Block className="h-4 w-8" />
           </div>
         ))}
       </div>

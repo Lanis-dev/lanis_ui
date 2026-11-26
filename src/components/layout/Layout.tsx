@@ -104,10 +104,9 @@ const Layout: React.FC<LayoutProps> = ({ children, basePath = '' }) => {
   const [hasDsbModule, setHasDsbModule] = React.useState(false);
   const [hasWahlenModule, setHasWahlenModule] = React.useState(false);
   const [hasVideokonferenzModule, setHasVideokonferenzModule] = React.useState(false);
-  const mobileMessages = isMessagesPage && isMobile;
   const mainRef = React.useRef<HTMLElement>(null);
   React.useLayoutEffect(() => {
-    if (!mainRef.current || mobileMessages) return;
+    if (!mainRef.current || isMessagesPage) return;
     const mobile = window.matchMedia('(max-width: 767px)');
     const scrollbar = OverlayScrollbars(mainRef.current, {
       scrollbars: { theme: 'os-theme-dark', autoHide: mobile.matches ? 'never' : 'leave', clickScroll: 'instant' },
@@ -120,7 +119,7 @@ const Layout: React.FC<LayoutProps> = ({ children, basePath = '' }) => {
       mobile.removeEventListener('change', updateVisibility);
       scrollbar.destroy();
     };
-  }, [mobileMessages]);
+  }, [isMessagesPage]);
   const pwaRef = React.useRef<any>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
   const logoutRef = React.useRef<HTMLDivElement>(null);
@@ -329,9 +328,9 @@ const Layout: React.FC<LayoutProps> = ({ children, basePath = '' }) => {
           <MagnifyingGlassIcon className="h-5 w-5" />
         </button>
       </div>
-      <main ref={mainRef} className={'layout-main flex-1 min-h-0 min-w-0 focus:outline-none transition-[margin] duration-300 ease-out ' + (mobileMessages ? 'flex flex-col overflow-hidden ' : 'overflow-y-auto ') + (isSidebarCollapsed ? 'md:ml-[60px]' : 'md:ml-64')}>
+      <main ref={mainRef} className={'layout-main flex-1 min-h-0 min-w-0 focus:outline-none transition-[margin] duration-300 ease-out ' + (isMessagesPage ? 'flex flex-col overflow-hidden ' : 'overflow-y-auto ') + (isSidebarCollapsed ? 'md:ml-[60px]' : 'md:ml-64')}>
         <BasePathProvider basePath={basePath}>
-          <div className={'animate-fade-in' + (mobileMessages ? ' flex flex-1 min-h-0 flex-col' : '')}>
+          <div className={'animate-fade-in' + (isMessagesPage ? ' flex flex-1 min-h-0 flex-col' : '')}>
             <AndroidConnectivity />
             {!isDemo && <OutageNotice />}
             {children}
