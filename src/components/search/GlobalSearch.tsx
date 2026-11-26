@@ -12,6 +12,7 @@ import type { SemanticSearchResult } from '../../services/api';
 import { readModulesCache } from '../../utils/moduleCache';
 import type { CachedModule } from '../../utils/moduleCache';
 import { normalizeCourseList } from '../../utils/courseNormalization';
+import { conversationPath, legacyMessagePath } from '../../utils/messageRoutes';
 import {
   MagnifyingGlassIcon,
   HomeIcon,
@@ -163,7 +164,7 @@ function searchCacheData(
               subtitle: sub || 'Nachricht',
               category: 'Nachrichten',
               icon: ChatBubbleLeftRightIcon,
-              href: `/messages?conversation=${encodeURIComponent(m.Uniquid || m.Id)}`,
+              href: conversationPath(m.id || m.Uniquid || m.Id),
             });
           }
         }
@@ -440,7 +441,7 @@ export default function GlobalSearch({
             title: htmlToText(fields.subject) || 'Kein Betreff',
             subtitle: sender ? `Von: ${sender}` : 'Nachricht · Absender unbekannt',
             category: 'Nachrichten', icon: ChatBubbleLeftRightIcon,
-            href: `/messages?conversation=${encodeURIComponent(message.Uniquid || message.Id)}`,
+            href: conversationPath(message.id || message.Uniquid || message.Id),
           }];
         });
       };
@@ -451,7 +452,11 @@ export default function GlobalSearch({
             title: user.name || user.username,
             subtitle: user.type ? `${user.type} · ${user.username}` : user.username,
             category: 'Nutzer', icon: UserIcon,
-            href: `/messages?compose=1&recipient=${encodeURIComponent(user.id)}&recipientName=${encodeURIComponent(user.name || user.username)}&recipientUsername=${encodeURIComponent(user.username || '')}`,
+            href: `/messages/draft?${new URLSearchParams({
+              recipient: user.id,
+              recipientName: user.name || user.username,
+              recipientUsername: user.username || '',
+            })}`,
           }))),
         headers.then(matchingHeaders),
         Promise.all([headers, recipientRequest]).then(([res]) => matchingHeaders(res)),
@@ -575,6 +580,9 @@ export default function GlobalSearch({
           const label = htmlToText(r.subtitle);
           const senderId = r.category === 'Nachrichten' ? /^(?:Von:\s*)?(\d+)$/i.exec(label)?.[1] : undefined;
           const name = senderId ? senderNamesRef.current[senderId] : '';
+          let href = r.href;
+          if (r.category === 'Module') href = moduleInAppHref({ name: r.title }, planNavigation, basePath) || href;
+          if (href?.startsWith('/messages?')) href = legacyMessagePath(new URLSearchParams(href.slice('/messages?'.length))) || href;
           return {
             id: r.id,
             title: r.title,
@@ -582,7 +590,7 @@ export default function GlobalSearch({
             senderId,
             category: r.category,
             icon: iconMap[r.icon] || MagnifyingGlassIcon,
-            href: r.category === 'Module' ? moduleInAppHref({ name: r.title }, planNavigation, basePath) || r.href : r.href,
+            href,
           };
         });
         setSemanticResults(mapped);

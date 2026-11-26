@@ -1,12 +1,15 @@
 import { capture } from '../../analytics/client';
+import * as Popover from '@radix-ui/react-popover';
 import { ConversationSkeleton } from '../shared/ModuleLoadingSkeletons';
 import { useCachedState } from '../../hooks/useCachedState';
 import { readPersonalCache, writePersonalCache } from '../../utils/accountDataWrites';
 import { MessagesListSkeleton } from '../shared/LoadingSkeletons';
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useBasePath } from '../../contexts/BasePathContext';
+import { useBackNavigation } from '../../hooks/useBackNavigation';
 import { messagesAPI } from '../../services/api';
-import { useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { MessageHeader, Message, SearchResult, SendMessageRequest, ReplyMessageRequest } from '../../types';
 import SEO from '../seo/SEO';
@@ -22,12 +25,14 @@ import {
   AcademicCapIcon,
   ArrowLeftIcon,
   ArrowUpIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import { format, parseISO, isValid, isToday, isYesterday, differenceInCalendarDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import clsx from 'clsx';
 import { isDemoRoute, notifyDemoCacheWrite } from '../../utils/demoMode';
 import { canWriteAccountData, captureAccountDataGeneration } from '../../utils/accountDataWrites';
+import { conversationPath, legacyMessagePath } from '../../utils/messageRoutes';
 
 const htmlToText = (value: unknown): string => {
   if (typeof value !== 'string') return '';
@@ -56,7 +61,16 @@ interface ConversationParticipant {
 
 const Messages: React.FC = () => {
   const { token } = useAuth();
+  const basePath = useBasePath();
+  const inboxPath = `${basePath}/messages`;
+  const draftPath = `${inboxPath}/draft`;
+  const goBack = useBackNavigation(inboxPath);
+  const { messageId } = useParams();
+  const { key: locationKey } = useLocation();
   const [searchParams] = useSearchParams();
+  const isDraft = messageId === 'draft';
+  const selectedConversation = !isDraft && messageId ? messageId : null;
+  const hasDetail = isDraft || !!selectedConversation;
   const [messages, setMessages, hasMessages] = useCachedState<MessageHeader[]>('messages', () => {
     try {
       const cached = isDemoRoute() ? null : readPersonalCache('messages_cache_v2');
@@ -64,36 +78,29 @@ const Messages: React.FC = () => {
       return Array.isArray(parsed) ? parsed : [];
     } catch { return []; }
   });
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const activeConversation = useRef<{ id: string; token: string } | null>(null);
   const [conversations, setConversations] = useCachedState<Record<string, Message[]>>('conversations', {});
-  const conversationMessages = selectedConversation ? conversations[selectedConversation] || [] : [];
+  const savedConversation = selectedConversation ? conversations[selectedConversation] : undefined;
+  const conversationMessages = Array.isArray(savedConversation) ? savedConversation : [];
   const [isLoading, setIsLoading] = useState(true);
   const conversationRequest = useRef(0);
   const [isConversationLoading, setIsConversationLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showCompose, setShowCompose] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [participantSearch, setParticipantSearch] = useState('');
 
   const [messageSearch, setMessageSearch] = useState('');
   const inbox = useRef<HTMLDivElement>(null);
   const inboxScroll = useRef(0);
+  const detailHeading = useRef<HTMLHeadingElement>(null);
 
   useLayoutEffect(() => {
-    if (!selectedConversation && inbox.current) inbox.current.scrollTop = inboxScroll.current;
-  }, [selectedConversation]);
+    if (!hasDetail && inbox.current) inbox.current.scrollTop = inboxScroll.current;
+  }, [hasDetail]);
 
-  if (!token) {
-    return (
-      <div className="p-6">
-        <div className="text-center py-12">
-          <h3 className="text-lg font-medium text-surface-900">Nicht authentifiziert</h3>
-          <p className="text-surface-500">Bitte melden Sie sich an, um Nachrichten zu sehen.</p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (hasDetail) detailHeading.current?.focus({ preventScroll: true });
+  }, [hasDetail, messageId]);
 
   const [composeData, setComposeData] = useState({
     recipients: [] as SearchResult[],
@@ -101,16 +108,27 @@ const Messages: React.FC = () => {
     content: '',
   });
   const [recipientSearch, setRecipientSearch] = useState('');
+  const recipientInput = useRef<HTMLInputElement>(null);
+  const recipientPopup = useRef<HTMLDivElement>(null);
+  const [showRecipientResults, setShowRecipientResults] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [recipientStatus, setRecipientStatus] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const activeDraft = useRef<{ key: string; close: () => void } | null>(null);
+  const seededDrafts = useRef(new Set<string>());
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
-  const replyBody = selectedConversation ? replyDrafts[selectedConversation] || '' : '';
+  const savedReply = selectedConversation ? replyDrafts[selectedConversation] : undefined;
+  const replyBody = typeof savedReply === 'string' ? savedReply : '';
   const [replyError, setReplyError] = useState<{ id: string; text: string } | null>(null);
   const [composeError, setComposeError] = useState('');
   const [conversationError, setConversationError] = useState('');
   const [isReplying, setIsReplying] = useState(false);
   const [attachmentToast, setAttachmentToast] = useState<{ conversation: string } | null>(null);
+
+  useLayoutEffect(() => {
+    activeDraft.current = isDraft ? { key: locationKey, close: goBack } : null;
+    return () => { activeDraft.current = null; };
+  }, [isDraft, locationKey, goBack]);
 
   useEffect(() => {
     if (!attachmentToast) return;
@@ -181,30 +199,29 @@ const Messages: React.FC = () => {
 
   useEffect(() => {
     if (!token) return;
-    activeConversation.current = selectedConversation ? { id: selectedConversation, token } : null;
     const abortController = new AbortController();
     loadMessages(abortController.signal);
-    // The URL effect reloads deep-linked conversations with the new token.
-    if (!searchParams.get('conversation') && selectedConversation && isConversationLoading) {
-      void loadConversation(selectedConversation);
-    }
-    return () => {
-      abortController.abort();
-      activeConversation.current = null;
-      conversationRequest.current++;
-    };
+    return () => abortController.abort();
   }, [token]);
 
-  useEffect(() => {
-    const conversationId = searchParams.get('conversation');
-    if (conversationId && token) {
-      loadConversation(conversationId);
-    }
-  }, [searchParams, token]);
+  useLayoutEffect(() => {
+    setShowParticipants(false);
+    setParticipantSearch('');
+    if (!selectedConversation || !token) return;
+    const controller = new AbortController();
+    activeConversation.current = { id: selectedConversation, token };
+    void loadConversation(selectedConversation, controller.signal);
+    return () => {
+      activeConversation.current = null;
+      conversationRequest.current++;
+      controller.abort();
+    };
+  }, [selectedConversation, token]);
 
   useEffect(() => {
     const recipientId = searchParams.get('recipient');
-    if (searchParams.get('compose') !== '1' || !recipientId) return;
+    if (!isDraft || !recipientId || seededDrafts.current.has(locationKey)) return;
+    seededDrafts.current.add(locationKey);
 
     const recipient: SearchResult = {
       id: recipientId,
@@ -218,8 +235,17 @@ const Messages: React.FC = () => {
         ? previous.recipients
         : [...previous.recipients, recipient],
     }));
-    setShowCompose(true);
-  }, [searchParams]);
+  }, [isDraft, locationKey, searchParams]);
+
+  useEffect(() => {
+    if (!showParticipants) return;
+    const onBack = (event: Event) => {
+      event.preventDefault();
+      closeParticipantsModal();
+    };
+    window.addEventListener('lanis:back', onBack, true);
+    return () => window.removeEventListener('lanis:back', onBack, true);
+  }, [showParticipants]);
 
   const loadMessages = async (signal?: AbortSignal, clearError = true) => {
     if (!token) return;
@@ -231,7 +257,7 @@ const Messages: React.FC = () => {
       if (response.success) {
         const transformedMessages = response.conversations.map((msg: any) => ({
           Id: msg.Id || msg.id,
-          Uniquid: msg.id || msg.Uniquid,
+          Uniquid: String(msg.id || msg.Uniquid || msg.Id),
           Sender: msg.sender || msg.Sender,
           SenderId: msg.sender || msg.Sender,
           SenderName: displayName(msg.SenderName, msg.sender || msg.Sender),
@@ -255,23 +281,20 @@ const Messages: React.FC = () => {
       }
       setIsLoading(false);
     } catch (error) {
-      if (axios.isCancel(error)) return;
+      if (signal?.aborted || axios.isCancel(error)) return;
       console.error('Error loading messages:', error);
       setError('Fehler beim Laden der Nachrichten.');
       setIsLoading(false);
     }
   };
 
-  const loadConversation = async (conversationId: string) => {
+  const loadConversation = async (conversationId: string, signal?: AbortSignal) => {
     if (!token) return;
     const requestId = ++conversationRequest.current;
     setConversationError('');
-    if (inbox.current?.getClientRects().length) inboxScroll.current = inbox.current.scrollTop;
     try {
-      setIsConversationLoading(conversations[conversationId] === undefined);
-      activeConversation.current = { id: conversationId, token };
-      setSelectedConversation(conversationId);
-      const response = await messagesAPI.getConversation(token, conversationId);
+      setIsConversationLoading(!Array.isArray(conversations[conversationId]));
+      const response = await messagesAPI.getConversation(token, conversationId, 0, signal);
       if (requestId !== conversationRequest.current) return;
       if (response.success && response.messages) {
         const transformedMessages = response.messages.map((msg: any) => ({
@@ -311,38 +334,48 @@ const Messages: React.FC = () => {
     } finally {
       if (requestId === conversationRequest.current) {
         setIsConversationLoading(false);
-        void loadMessages(undefined, false);
+        void loadMessages(signal, false);
       }
     }
   };
 
-  const searchRecipients = async (query: string) => {
-    if (!token || !query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    try {
-      setIsSearching(true);
-      const response = await messagesAPI.searchRecipients(token, query);
-      if (response.success) {
-        setSearchResults(response.results);
+  useEffect(() => {
+    const query = recipientSearch.trim();
+    if (!isDraft || !token || !query) return;
+    const controller = new AbortController();
+    setRecipientStatus('Suche läuft …');
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await messagesAPI.searchRecipients(token, query, controller.signal);
+        if (controller.signal.aborted) return;
+        if (response.success) {
+          setSearchResults(response.results);
+          setRecipientStatus('');
+        } else {
+          setRecipientStatus('Empfänger konnten nicht geladen werden.');
+        }
+      } catch {
+        if (!controller.signal.aborted) setRecipientStatus('Empfänger konnten nicht geladen werden.');
       }
-    } catch (error) {
-      console.error('Error searching recipients:', error);
-    } finally {
-      setIsSearching(false);
-    }
+    }, 200);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [isDraft, recipientSearch, token]);
+
+  const updateRecipientSearch = (value: string) => {
+    setRecipientSearch(value);
+    setSearchResults([]);
+    setRecipientStatus(value.trim() ? 'Suche läuft …' : '');
   };
 
   const addRecipient = (recipient: SearchResult) => {
-    if (!composeData.recipients.some(r => r.id === recipient.id)) {
-      setComposeData(prev => ({
-        ...prev,
-        recipients: [...prev.recipients, recipient]
-      }));
-    }
-    setRecipientSearch('');
-    setSearchResults([]);
+    setComposeData(prev => prev.recipients.some(r => r.id === recipient.id)
+      ? prev
+      : { ...prev, recipients: [...prev.recipients, recipient] });
+    updateRecipientSearch('');
+    recipientInput.current?.focus();
   };
 
   const removeRecipient = (recipientId: string) => {
@@ -350,6 +383,13 @@ const Messages: React.FC = () => {
       ...prev,
       recipients: prev.recipients.filter(r => r.id !== recipientId)
     }));
+  };
+
+  const discardDraft = () => {
+    setComposeData({ recipients: [], subject: '', content: '' });
+    updateRecipientSearch('');
+    setComposeError('');
+    goBack();
   };
 
   const sendMessage = async () => {
@@ -367,9 +407,16 @@ const Messages: React.FC = () => {
       const response = await messagesAPI.sendMessage(token, messageRequest);
       if (response.success) {
         void capture('message_sent');
-        setShowCompose(false);
-        setComposeData({ recipients: [], subject: '', content: '' });
-        await loadMessages();
+        setComposeData(current => ({
+          recipients: current.recipients.filter(recipient => !messageRequest.recipients.includes(recipient.id)),
+          subject: '',
+          content: '',
+        }));
+        seededDrafts.current.clear();
+        updateRecipientSearch('');
+        const draft = activeDraft.current;
+        if (draft?.key === locationKey) draft.close();
+        void loadMessages();
       } else {
         setComposeError('Nachricht konnte nicht gesendet werden. Versuche es erneut.');
       }
@@ -437,6 +484,14 @@ const Messages: React.FC = () => {
     !query || [message.Betreff, message.SenderName || message.Sender, ...(message.empf || [])]
       .some(value => typeof value === 'string' && value.toLocaleLowerCase('de-DE').includes(query)),
   );
+  const availableRecipients = searchResults.filter(result => !composeData.recipients.some(recipient => recipient.id === result.id));
+  const canSend = !!(composeData.recipients.length && composeData.subject.trim() && composeData.content.trim());
+  const recipientPopupOpen = showRecipientResults && !!recipientSearch.trim() && !isSending;
+
+  if (!token) return null;
+
+  const redirectedPath = !messageId && legacyMessagePath(searchParams);
+  if (redirectedPath) return <Navigate to={basePath + redirectedPath} replace />;
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -446,18 +501,19 @@ const Messages: React.FC = () => {
         path="/messages"
         noindex
       />
-      {/* Messages list - hidden on mobile when conversation is selected */}
-      <div className={`${selectedConversation ? 'hidden lg:flex' : 'flex'} relative min-h-0 w-full lg:w-80 xl:w-1/3 border-r border-surface-100 dark:border-surface-800 flex-col bg-surface-50 dark:bg-surface-950 lg:bg-white lg:dark:bg-surface-900`}>
+      <div className={`${hasDetail ? 'hidden lg:flex' : 'flex'} relative min-h-0 w-full lg:w-80 xl:w-1/3 border-r border-surface-100 dark:border-surface-800 flex-col bg-surface-50 dark:bg-surface-950 lg:bg-white lg:dark:bg-surface-900`}>
         <div className="shrink-0 md:shrink p-4 sm:p-6 lg:p-4 border-b border-surface-100 dark:border-surface-800">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="page-title">Nachrichten</h1>
-            <button
-              onClick={() => setShowCompose(true)}
+            {isDraft ? <h2 className="page-title">Nachrichten</h2> : <h1 className="page-title">Nachrichten</h1>}
+            <Link
+              to={draftPath}
+              replace={isDraft}
+              aria-current={isDraft ? 'page' : undefined}
               className="btn btn-primary hidden h-9 px-3 text-xs md:inline-flex"
             >
               <PlusIcon className="h-4 w-4 mr-1.5" />
               Neue Nachricht
-            </button>
+            </Link>
           </div>
 
           <div className="relative">
@@ -473,7 +529,9 @@ const Messages: React.FC = () => {
           </div>
         </div>
 
-        <div ref={inbox} className="flex-1 overflow-y-auto pb-20 md:pb-0">
+        <div ref={inbox} onScroll={event => {
+          if (event.currentTarget.clientHeight) inboxScroll.current = event.currentTarget.scrollTop;
+        }} className="flex-1 overflow-y-auto pb-20 md:pb-0">
           {error && (
             <div className="m-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 rounded-xl text-xs">
               {error}
@@ -502,17 +560,17 @@ const Messages: React.FC = () => {
               {visibleMessages.map(message => {
                 const selected = selectedConversation === message.Uniquid;
                 return (
-                  <button
-                    type="button"
+                  <Link
+                    to={basePath + conversationPath(message.Uniquid)}
+                    replace={selected}
                     key={message.Uniquid}
-                    aria-current={selected ? 'true' : undefined}
+                    aria-current={selected ? 'page' : undefined}
                     className={clsx(
                       'relative grid w-full grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-2.5 py-3 pl-[15px] pr-3 text-left transition-colors focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500',
                       selected
                         ? 'bg-primary-50 before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-primary-500 dark:bg-primary-950/40'
                         : 'hover:bg-surface-100 dark:hover:bg-surface-800',
                     )}
-                    onClick={() => loadConversation(message.Uniquid)}
                   >
                     <span className={clsx('mt-1.5 h-2 w-2 rounded-full', message.unread && 'bg-primary-600 dark:bg-primary-400')}>
                       {message.unread && <span className="sr-only">Ungelesen</span>}
@@ -530,42 +588,192 @@ const Messages: React.FC = () => {
                         {formatInboxDate(message.date)}
                       </time>
                     )}
-                  </button>
+                  </Link>
                 );
               })}
             </div>
           )}
         </div>
-        <button
-          type="button"
+        <Link
+          to={draftPath}
           aria-label="Neue Nachricht"
-          onClick={() => setShowCompose(true)}
           className="btn btn-primary absolute bottom-4 right-4 z-10 h-14 w-14 rounded-full p-0 shadow-soft-lg md:hidden"
         >
           <PlusIcon aria-hidden="true" className="h-6 w-6" />
-        </button>
+        </Link>
       </div>
 
-      {/* Conversation view - visible on mobile only when conversation selected */}
-      <div className={`${selectedConversation ? 'flex' : 'hidden lg:flex'} flex-1 flex-col min-h-0 min-w-0`}>
-        {selectedConversation ? (
+      <div className={`${hasDetail ? 'flex' : 'hidden lg:flex'} flex-1 flex-col min-h-0 min-w-0`}>
+        {isDraft ? (
+          <form aria-busy={isSending} className="flex min-h-0 flex-1 flex-col" onSubmit={event => {
+            event.preventDefault();
+            void sendMessage();
+          }}>
+            <header className="shrink-0 border-b border-surface-100 bg-white px-4 py-3 dark:border-surface-800 dark:bg-surface-900">
+              <div className="flex items-center gap-3">
+                <h1 ref={detailHeading} tabIndex={-1} className="item-title outline-none">Neue Nachricht</h1>
+                <button
+                  type="button"
+                  aria-label="Entwurf verwerfen"
+                  title="Entwurf verwerfen"
+                  onClick={discardDraft}
+                  disabled={isSending}
+                  className="btn btn-ghost ml-auto h-10 w-10 shrink-0 p-0 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950 dark:hover:text-red-400"
+                >
+                  <TrashIcon aria-hidden="true" className="h-5 w-5" />
+                </button>
+              </div>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+              <div className="mx-auto flex min-h-full w-full min-w-0 max-w-3xl flex-col gap-5">
+                <div>
+                  <label className="label" htmlFor="message-recipients">Empfänger</label>
+                  <Popover.Root open={recipientPopupOpen} onOpenChange={setShowRecipientResults}>
+                    <Popover.Anchor className="relative">
+                      <MagnifyingGlassIcon aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-500" />
+                      <input
+                        type="search"
+                        id="message-recipients"
+                        ref={recipientInput}
+                        disabled={isSending}
+                        placeholder="Namen suchen"
+                        className="input message-recipient-input pl-9"
+                        autoComplete="off"
+                        aria-haspopup="dialog"
+                        aria-controls={recipientPopupOpen ? 'message-recipient-results' : undefined}
+                        value={recipientSearch}
+                        onFocus={() => setShowRecipientResults(true)}
+                        onClick={() => setShowRecipientResults(true)}
+                        onChange={event => {
+                          setShowRecipientResults(true);
+                          updateRecipientSearch(event.target.value);
+                        }}
+                        onKeyDown={event => {
+                          if (event.nativeEvent.isComposing) return;
+                          if (event.key === 'ArrowDown' && recipientSearch.trim()) {
+                            event.preventDefault();
+                            if (recipientPopupOpen) recipientPopup.current?.querySelector('button')?.focus();
+                            else setShowRecipientResults(true);
+                          }
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            if (recipientPopupOpen && availableRecipients.length === 1) addRecipient(availableRecipients[0]);
+                          }
+                        }}
+                      />
+                    </Popover.Anchor>
+                    <Popover.Portal>
+                      <Popover.Content
+                        ref={recipientPopup}
+                        id="message-recipient-results"
+                        aria-label="Empfängersuche"
+                        data-input-popup
+                        align="start"
+                        sideOffset={-1}
+                        collisionPadding={12}
+                        hideWhenDetached
+                        onOpenAutoFocus={event => event.preventDefault()}
+                        onCloseAutoFocus={event => event.preventDefault()}
+                        onInteractOutside={event => {
+                          if (event.target === recipientInput.current) event.preventDefault();
+                        }}
+                        onEscapeKeyDown={() => recipientInput.current?.focus({ preventScroll: true })}
+                        className="message-recipient-results z-40 max-h-[min(11rem,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] overflow-y-auto"
+                      >
+                        <p role="status" className="px-3 py-2.5 text-xs text-surface-600 empty:hidden dark:text-surface-400">
+                          {recipientStatus || (availableRecipients.length === 0 ? 'Keine weiteren Empfänger gefunden.' : '')}
+                        </p>
+                        {availableRecipients.length > 0 && (
+                          <ul aria-label="Suchergebnisse" className="divide-y divide-surface-100 dark:divide-surface-800">
+                            {availableRecipients.map(result => (
+                              <li key={result.id}>
+                                <button type="button" disabled={isSending} onClick={() => addRecipient(result)} className="btn btn-ghost w-full items-center justify-start gap-3 rounded-none px-3 py-2 text-left">
+                                  <UserIcon aria-hidden="true" className="h-4 w-4 shrink-0 text-surface-500" />
+                                  <span className="min-w-0 break-words">
+                                    <span className="block">{result.name}</span>
+                                    <span className="block text-xs text-surface-600 dark:text-surface-400">{result.username}</span>
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </Popover.Content>
+                    </Popover.Portal>
+                  </Popover.Root>
+                  {composeData.recipients.length > 0 && (
+                    <ul aria-label="Ausgewählte Empfänger" className="mt-2 flex flex-wrap gap-2">
+                      {composeData.recipients.map(recipient => (
+                        <li key={recipient.id} className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary-50 pl-3 text-sm font-medium text-primary-800 dark:bg-primary-950 dark:text-primary-200">
+                          <span className="min-w-0 break-words">{recipient.name}</span>
+                          <button
+                            type="button"
+                            disabled={isSending}
+                            aria-label={`${recipient.name} entfernen`}
+                            onClick={() => removeRecipient(recipient.id)}
+                            className="btn btn-ghost h-8 w-8 shrink-0 rounded-full p-0"
+                          >
+                            <XMarkIcon aria-hidden="true" className="h-4 w-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="message-subject">Betreff</label>
+                  <input
+                    type="text"
+                    className="input"
+                    id="message-subject"
+                    disabled={isSending}
+                    value={composeData.subject}
+                    onChange={event => setComposeData(previous => ({ ...previous, subject: event.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="flex min-h-36 flex-1 flex-col">
+                  <label className="label" htmlFor="message-content">Nachricht</label>
+                  <textarea
+                    className="input min-h-32 flex-1 resize-none leading-relaxed"
+                    rows={5}
+                    id="message-content"
+                    disabled={isSending}
+                    value={composeData.content}
+                    onChange={event => setComposeData(previous => ({ ...previous, content: event.target.value }))}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            <footer className="shrink-0 border-t border-surface-100 bg-white px-4 py-3 dark:border-surface-800 dark:bg-surface-900 sm:px-6">
+              <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-end gap-3">
+                {composeError && <p role="alert" className="flex-1 basis-full text-sm text-red-600 dark:text-red-400 sm:basis-auto">{composeError}</p>}
+                <button type="submit" disabled={isSending || !canSend} className="btn btn-primary gap-2 disabled:opacity-50">
+                  <PaperAirplaneIcon aria-hidden="true" className="h-4 w-4" />
+                  {isSending ? 'Wird gesendet …' : 'Senden'}
+                </button>
+              </div>
+            </footer>
+          </form>
+        ) : selectedConversation ? (
           <>
             <div className="shrink-0 md:shrink border-b border-surface-100 dark:border-surface-800 p-4 bg-white/80 dark:bg-surface-900/80 backdrop-blur-sm">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <button
-                    aria-label="Zurück zum Posteingang"
-                    onClick={() => {
-                      activeConversation.current = null;
-                      conversationRequest.current++;
-                      setIsConversationLoading(false);
-                      setSelectedConversation(null);
-                    }}
-                    className="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+                    type="button"
+                    aria-label="Zurück"
+                    onClick={goBack}
+                    className="btn btn-ghost h-10 w-10 shrink-0 p-0 lg:hidden"
                   >
                     <ArrowLeftIcon className="h-5 w-5" />
                   </button>
-                  <h2 className="item-title min-w-0 break-words">
+                  <h2 ref={detailHeading} tabIndex={-1} className="item-title min-w-0 break-words outline-none">
                     {messages.find(m => m.Uniquid === selectedConversation)?.Betreff || 'Unterhaltung'}
                   </h2>
                 </div>
@@ -682,132 +890,6 @@ const Messages: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Compose modal */}
-      {showCompose && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface-900/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-surface-800 rounded-2xl sm:rounded-2xl shadow-soft-lg max-w-lg w-full max-h-[85vh] flex flex-col animate-scale-in mx-2 sm:mx-0">
-            <div className="flex items-center justify-between p-5 border-b border-surface-100 dark:border-surface-800">
-              <h3 className="item-title">Neue Nachricht</h3>
-              <button
-                aria-label="Neue Nachricht schließen"
-                onClick={() => setShowCompose(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 p-5 space-y-4 overflow-y-auto">
-              <div>
-                <label className="label" htmlFor="message-recipients">Empfänger</label>
-                <div className="space-y-2">
-                  {composeData.recipients.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {composeData.recipients.map((recipient) => (
-                        <span
-                          key={recipient.id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800"
-                        >
-                          {recipient.name}
-                          <button
-                            aria-label={`${recipient.name} entfernen`}
-                            onClick={() => removeRecipient(recipient.id)}
-                            className="text-primary-400 dark:text-primary-500 hover:text-primary-600 dark:hover:text-primary-300"
-                          >
-                            <XMarkIcon className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      id="message-recipients"
-                      placeholder="Empfänger suchen..."
-                      className="input text-sm"
-                      value={recipientSearch}
-                      onChange={(e) => {
-                        setRecipientSearch(e.target.value);
-                        searchRecipients(e.target.value);
-                      }}
-                    />
-                    {isSearching && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <span className="w-3 h-3 rounded-full border-2 border-primary-300 border-t-primary-600 animate-spin block" />
-                      </span>
-                    )}
-                  </div>
-                  {searchResults.length > 0 && (
-                    <div className="border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden">
-                      {searchResults.map((result) => (
-                        <button
-                          key={result.id}
-                          onClick={() => addRecipient(result)}
-                          className="w-full text-left px-3.5 py-2.5 hover:bg-surface-50 dark:hover:bg-surface-800 border-b border-surface-100 dark:border-surface-700 last:border-b-0 transition-colors text-sm"
-                        >
-                          <div className="font-medium text-surface-900 dark:text-surface-100">{result.name}</div>
-                          <div className="text-xs text-surface-500 dark:text-surface-400">{result.username}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="message-subject">Betreff</label>
-                <input
-                  type="text"
-                  className="input text-sm"
-                  id="message-subject"
-                  value={composeData.subject}
-                  onChange={(e) => setComposeData(prev => ({ ...prev, subject: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="message-content">Nachricht</label>
-                <textarea
-                  rows={8}
-                  className="input text-sm resize-none"
-                  id="message-content"
-                  value={composeData.content}
-                  onChange={(e) => setComposeData(prev => ({ ...prev, content: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            {composeError && <p role="alert" className="px-5 pb-3 text-sm text-red-600 dark:text-red-400">{composeError}</p>}
-            <div className="flex items-center justify-end gap-3 p-5 border-t border-surface-100 dark:border-surface-800">
-              <button
-                onClick={() => setShowCompose(false)}
-                className="btn btn-secondary h-9 text-xs"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={sendMessage}
-                disabled={isSending || composeData.recipients.length === 0 || !composeData.subject.trim() || !composeData.content.trim()}
-                className="btn btn-primary h-9 text-xs disabled:opacity-50"
-              >
-                {isSending ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                    Senden...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    <PaperAirplaneIcon className="h-3.5 w-3.5" />
-                    Senden
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Participants modal */}
       {showParticipants && selectedConversation && (

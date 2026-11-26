@@ -98,6 +98,7 @@ export function routeLabel(pathname: string): string {
   const path = pathname.replace(/\/+$/, '') || '/';
   const clean = path.replace(/^\/demo(?=\/|$)/, '') || '/';
   if (routes.has(clean)) return clean;
+  if (/^\/messages\/[^/]+$/.test(clean)) return '/messages';
   if (/^\/courses\/submissions\/[^/]+$/.test(clean)) return '/courses/submissions/:id';
   if (/^\/status\/incident\/[^/]+$/.test(clean)) return '/status/incident/:id';
   if (/^\/schule\/[^/]+$/.test(clean)) return '/schule/:id';

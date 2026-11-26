@@ -48,6 +48,51 @@ const puppeteer = require('puppeteer-core');
       await expectPath('/demo/courses/submissions/demo-s2');
       await back();
       await expectPath('/demo/courses/b1');
+      // Inbox links, browser history and the draft editor share route state.
+      const mobile = width < 1024;
+      const paneBack = 'main button[aria-label="Zurück"]';
+      const discard = 'main button[aria-label="Entwurf verwerfen"]';
+      const messageBack = async () => {
+        await page.waitForSelector(paneBack, mobile ? { visible: true } : { hidden: true });
+        if (mobile) await page.click(paneBack);
+        else await page.goBack();
+      };
+      await open('/demo/messages');
+      await follow('/demo/messages/uq-1');
+      await page.waitForSelector('article');
+      await page.goBack();
+      await expectPath('/demo/messages');
+      await page.goForward();
+      await expectPath('/demo/messages/uq-1');
+      await messageBack();
+      await expectPath('/demo/messages');
+      await follow('/demo/messages/draft');
+      await page.waitForSelector('#message-subject', { visible: true });
+      assert.equal(await page.$(paneBack), null);
+      await page.type('#message-subject', 'Testentwurf');
+      await page.goBack();
+      await expectPath('/demo/messages');
+      await page.goForward();
+      await expectPath('/demo/messages/draft');
+      await page.waitForSelector('#message-subject', { visible: true });
+      assert.equal(await page.$eval('#message-subject', field => field.value), 'Testentwurf');
+      await page.waitForSelector(discard, { visible: true });
+      await page.click(discard);
+      await expectPath('/demo/messages');
+      await page.goForward();
+      await page.waitForSelector('#message-subject', { visible: true });
+      assert.equal(await page.$eval('#message-subject', field => field.value), '');
+      await open('/demo/messages?conversation=uq-2');
+      await expectPath('/demo/messages/uq-2');
+      await page.waitForSelector('article');
+      if (mobile) await page.click(paneBack);
+      else await follow('/demo/messages');
+      await expectPath('/demo/messages');
+      await open('/demo/messages?compose=1&recipient=r1&recipientName=Clara+Neumann');
+      await expectPath('/demo/messages/draft');
+      await page.waitForSelector('button[aria-label="Clara Neumann entfernen"]');
+      await page.click(discard);
+      await expectPath('/demo/messages');
       // Direct entry uses the demo-aware fallback, with replace to avoid loops.
       for (const [path, fallback] of [
         ['/demo/settings/appearance', '/demo/settings'],

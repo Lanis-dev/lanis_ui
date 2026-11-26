@@ -41,6 +41,7 @@ import SchoolDirectoryPage from './components/schools/SchoolDirectoryPage';
 import TermsOfService from './components/legal/TermsOfService';
 import AgentAuthorization from './components/agents/AgentAuthorization';
 import { agentLoginPath, agentReturnPath } from './utils/agentBackend';
+import { messagesReturnPath } from './utils/messageRoutes';
 
 const LandingRoot: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -54,7 +55,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const { isAuthenticated } = useAuth();
   const location = useLocation();
   if (!isAuthenticated) {
-    return <Navigate to={agentLoginPath(location.pathname + location.search)} replace />;
+    const destination = location.pathname + location.search;
+    return <Navigate to={agentLoginPath(destination)} state={{ messagesReturnTo: messagesReturnPath(destination) }} replace />;
   }
   return <>{children}</>;
 };
@@ -62,7 +64,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
-  const returnTo = agentReturnPath(new URLSearchParams(location.search).get('returnTo'));
+  const returnTo = agentReturnPath(new URLSearchParams(location.search).get('returnTo'))
+    || messagesReturnPath(location.state?.messagesReturnTo);
   if (isAuthenticated) {
     return <Navigate to={returnTo || "/dashboard"} replace />;
   }
@@ -71,6 +74,7 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 const PreferencesGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { preferences, isLoading } = usePreferences();
+  const location = useLocation();
   if (isLoading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-surface-50 dark:bg-surface-950">
@@ -80,7 +84,9 @@ const PreferencesGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }
   const onboardingDone = preferences.onboarding.version >= CURRENT_ONBOARDING_VERSION
     && (preferences.onboarding.status === 'completed' || preferences.onboarding.status === 'skipped');
-  if (!onboardingDone) return <Navigate to="/onboarding" replace />;
+  if (!onboardingDone) {
+    return <Navigate to="/onboarding" state={{ messagesReturnTo: messagesReturnPath(location.pathname + location.search) }} replace />;
+  }
   return <>{children}</>;
 };
 
@@ -106,7 +112,7 @@ const AppRoutes: React.FC = () => {
         <Route path="/demo" element={<DemoRoute />}>
           <Route index element={<Navigate to="/demo/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="messages" element={<Messages />} />
+          <Route path="messages/:messageId?" element={<Messages />} />
           <Route path="courses" element={<Courses />} />
           <Route path="courses/submissions" element={<Submissions />} />
           <Route path="courses/submissions/:id" element={<Submissions />} />
@@ -147,7 +153,7 @@ const AppRoutes: React.FC = () => {
                 <Layout>
                   <Routes>
                     <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/messages" element={<Messages />} />
+                    <Route path="/messages/:messageId?" element={<Messages />} />
                     <Route path="/courses" element={<Courses />} />
                     <Route path="/courses/submissions" element={<Submissions />} />
                     <Route path="/courses/submissions/:id" element={<Submissions />} />

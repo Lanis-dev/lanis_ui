@@ -38,7 +38,7 @@ function load(path, require) {
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText, {
-    module, exports: module.exports, require, AbortController,
+    module, exports: module.exports, require, AbortController, URLSearchParams,
     DOMParser: class { parseFromString(text) { return { body: { textContent: text.replace(/<[^>]*>/g, '') } }; } },
     setTimeout: fn => { timers.set(++timerId, fn); return timerId; },
     clearTimeout: id => timers.delete(id),
@@ -46,6 +46,7 @@ function load(path, require) {
   return module.exports;
 }
 const matching = load('src/utils/search.ts');
+const messageRoutes = load('src/utils/messageRoutes.ts');
 const semanticRequests = [];
 const personalCaches = {};
 let moduleReads = 0;
@@ -67,6 +68,7 @@ const Component = load('src/components/search/GlobalSearch.tsx', name => {
   if (name.endsWith('/AuthContext')) return { useAuth: () => ({ token: 'test', user: null }) };
   if (name.endsWith('/services/api')) return api;
   if (name.endsWith('/utils/search')) return matching;
+  if (name.endsWith('/utils/messageRoutes')) return messageRoutes;
   if (name.endsWith('/hooks/useDialogFocus')) return { useDialogFocus() {} };
   if (name.endsWith('/moduleCache')) return { readModulesCache: () => { moduleReads++; return []; } };
   if (name.endsWith('/courseNormalization')) return { normalizeCourseList: () => [] };

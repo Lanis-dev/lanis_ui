@@ -11,6 +11,8 @@ export function nativeRoute(value: string): string | null {
 
 /** Android Back at a history root stays within the current app mode. */
 export function nativeBackFallback(pathname: string): string | null {
+  const messages = pathname.startsWith('/demo/') ? '/demo/messages' : '/messages';
+  if (pathname.replace(/\/+$/, '').startsWith(messages + '/')) return messages;
   const home = pathname.startsWith('/demo/') ? '/demo/dashboard' : '/dashboard';
   return [home, '/login', '/onboarding'].includes(pathname) ? null : home;
 }
