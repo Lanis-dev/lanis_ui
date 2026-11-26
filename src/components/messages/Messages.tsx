@@ -3,7 +3,7 @@ import { ConversationSkeleton } from '../shared/ModuleLoadingSkeletons';
 import { useCachedState } from '../../hooks/useCachedState';
 import { readPersonalCache, writePersonalCache } from '../../utils/accountDataWrites';
 import { MessagesListSkeleton } from '../shared/LoadingSkeletons';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { messagesAPI } from '../../services/api';
 import { useSearchParams } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { MessageHeader, Message, SearchResult, SendMessageRequest, ReplyMessageR
 import SEO from '../seo/SEO';
 import {
   PlusIcon,
+  MagnifyingGlassIcon,
   PaperAirplaneIcon,
   XMarkIcon,
   UserIcon,
@@ -20,8 +21,9 @@ import {
   ChatBubbleLeftIcon,
   AcademicCapIcon,
   ArrowLeftIcon,
+  ArrowUpIcon,
 } from '@heroicons/react/24/outline';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid, isToday, isYesterday, differenceInCalendarDays } from 'date-fns';
 import { de } from 'date-fns/locale';
 import clsx from 'clsx';
 import { isDemoRoute, notifyDemoCacheWrite } from '../../utils/demoMode';
@@ -34,6 +36,15 @@ const htmlToText = (value: unknown): string => {
 };
 
 const displayName = (value: unknown, fallback = ''): string => htmlToText(value) || fallback;
+
+const formatInboxDate = (value: string) => {
+  const date = parseISO(value);
+  if (!isValid(date)) return value;
+  if (isToday(date)) return format(date, 'HH:mm');
+  if (isYesterday(date)) return 'Gestern';
+  const daysAgo = differenceInCalendarDays(new Date(), date);
+  return format(date, daysAgo > 1 && daysAgo < 7 ? 'EEEEEE' : 'dd.MM.yy', { locale: de });
+};
 
 interface ConversationParticipant {
   id: string;
@@ -53,8 +64,8 @@ const Messages: React.FC = () => {
       return Array.isArray(parsed) ? parsed : [];
     } catch { return []; }
   });
-  const [isUpdating, setIsUpdating] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const activeConversation = useRef<{ id: string; token: string } | null>(null);
   const [conversations, setConversations] = useCachedState<Record<string, Message[]>>('conversations', {});
   const conversationMessages = selectedConversation ? conversations[selectedConversation] || [] : [];
   const [isLoading, setIsLoading] = useState(true);
@@ -66,6 +77,12 @@ const Messages: React.FC = () => {
   const [participantSearch, setParticipantSearch] = useState('');
 
   const [messageSearch, setMessageSearch] = useState('');
+  const inbox = useRef<HTMLDivElement>(null);
+  const inboxScroll = useRef(0);
+
+  useLayoutEffect(() => {
+    if (!selectedConversation && inbox.current) inbox.current.scrollTop = inboxScroll.current;
+  }, [selectedConversation]);
 
   if (!token) {
     return (
@@ -87,8 +104,45 @@ const Messages: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [replyBody, setReplyBody] = useState('');
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const replyBody = selectedConversation ? replyDrafts[selectedConversation] || '' : '';
+  const [replyError, setReplyError] = useState<{ id: string; text: string } | null>(null);
+  const [composeError, setComposeError] = useState('');
+  const [conversationError, setConversationError] = useState('');
   const [isReplying, setIsReplying] = useState(false);
+  const [attachmentToast, setAttachmentToast] = useState<{ conversation: string } | null>(null);
+
+  useEffect(() => {
+    if (!attachmentToast) return;
+    const timeout = window.setTimeout(() => setAttachmentToast(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [attachmentToast]);
+
+  const replyComposer = useRef<HTMLDivElement>(null);
+  const replyPill = useRef<HTMLDivElement>(null);
+  const messageHistory = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const composer = replyComposer.current;
+    const history = messageHistory.current;
+    const pill = replyPill.current;
+    if (!composer || !history || !pill) return;
+
+    const reserveComposerSpace = () => {
+      const wasAtBottom = history.scrollHeight - history.clientHeight - history.scrollTop <= 1;
+      const pillBounds = pill.getBoundingClientRect();
+      const bottomInset = composer.getBoundingClientRect().bottom - (pillBounds.top + pillBounds.height / 2);
+      history.style.setProperty('--reply-history-inset', `${bottomInset}px`);
+      history.style.setProperty('--reply-history-overlap', `${composer.offsetHeight - bottomInset}px`);
+      if (wasAtBottom) history.scrollTop = history.scrollHeight;
+    };
+    reserveComposerSpace();
+
+    const observer = new ResizeObserver(reserveComposerSpace);
+    observer.observe(composer);
+    observer.observe(pill);
+    return () => observer.disconnect();
+  }, [selectedConversation, isConversationLoading, conversationError]);
 
   const USERNAME_CACHE_KEY = 'username_cache';
   const USERNAME_CACHE_TTL = 365 * 24 * 60 * 60 * 1000;
@@ -127,9 +181,18 @@ const Messages: React.FC = () => {
 
   useEffect(() => {
     if (!token) return;
+    activeConversation.current = selectedConversation ? { id: selectedConversation, token } : null;
     const abortController = new AbortController();
     loadMessages(abortController.signal);
-    return () => { abortController.abort(); conversationRequest.current++; };
+    // The URL effect reloads deep-linked conversations with the new token.
+    if (!searchParams.get('conversation') && selectedConversation && isConversationLoading) {
+      void loadConversation(selectedConversation);
+    }
+    return () => {
+      abortController.abort();
+      activeConversation.current = null;
+      conversationRequest.current++;
+    };
   }, [token]);
 
   useEffect(() => {
@@ -161,7 +224,6 @@ const Messages: React.FC = () => {
   const loadMessages = async (signal?: AbortSignal, clearError = true) => {
     if (!token) return;
     const writeGeneration = captureAccountDataGeneration();
-    setIsUpdating(true);
     try {
       if (clearError) setError('');
       const response = await messagesAPI.getMessageHeaders(token, 'All', 0, signal);
@@ -178,7 +240,7 @@ const Messages: React.FC = () => {
           private: msg.private || 0,
           empf: Array.isArray(msg.empf) ? msg.empf.map((recipient: unknown) => displayName(recipient)) : [],
           Papierkorb: msg.Papierkorb,
-          unread: !!(msg.unread === 1),
+          unread: msg.unread === 1 || msg.unread === true,
           date: msg.date || msg.Datum || new Date().toISOString(),
         }));
         const resolved = applyUsernameCache(transformedMessages);
@@ -197,16 +259,17 @@ const Messages: React.FC = () => {
       console.error('Error loading messages:', error);
       setError('Fehler beim Laden der Nachrichten.');
       setIsLoading(false);
-    } finally {
-      setIsUpdating(false);
     }
   };
 
   const loadConversation = async (conversationId: string) => {
     if (!token) return;
     const requestId = ++conversationRequest.current;
+    setConversationError('');
+    if (inbox.current?.getClientRects().length) inboxScroll.current = inbox.current.scrollTop;
     try {
       setIsConversationLoading(conversations[conversationId] === undefined);
+      activeConversation.current = { id: conversationId, token };
       setSelectedConversation(conversationId);
       const response = await messagesAPI.getConversation(token, conversationId);
       if (requestId !== conversationRequest.current) return;
@@ -223,27 +286,27 @@ const Messages: React.FC = () => {
         }));
         setConversations(current => ({ ...current, [conversationId]: transformedMessages }));
         void capture('message_read');
-        setError('');
+        setConversationError('');
       } else {
         if (response && typeof response === 'object' && 'error' in response) {
           if (response.error === 'No message data in response: {\'error\': \'-1\'}') {
-            setError('Diese Unterhaltung konnte nicht geladen werden. Möglicherweise ist sie nicht mehr verfügbar oder Sie haben keine Berechtigung.');
+            setConversationError('Diese Unterhaltung konnte nicht geladen werden. Möglicherweise ist sie nicht mehr verfügbar oder Sie haben keine Berechtigung.');
           } else {
-            setError(`Fehler beim Laden der Unterhaltung: ${response.error}`);
+            setConversationError(`Fehler beim Laden der Unterhaltung: ${response.error}`);
           }
         } else {
-          setError('Unbekannter Fehler beim Laden der Unterhaltung.');
+          setConversationError('Unbekannter Fehler beim Laden der Unterhaltung.');
         }
       }
     } catch (error: any) {
       if (requestId !== conversationRequest.current) return;
       console.error('Error loading conversation:', error);
       if (error?.response?.status === 404) {
-        setError('Unterhaltung nicht gefunden.');
+        setConversationError('Unterhaltung nicht gefunden.');
       } else if (error?.response?.status === 401) {
-        setError('Nicht berechtigt, diese Unterhaltung zu laden.');
+        setConversationError('Nicht berechtigt, diese Unterhaltung zu laden.');
       } else {
-        setError('Fehler beim Laden der Unterhaltung. Bitte versuchen Sie es später erneut.');
+        setConversationError('Fehler beim Laden der Unterhaltung. Bitte versuchen Sie es später erneut.');
       }
     } finally {
       if (requestId === conversationRequest.current) {
@@ -290,11 +353,12 @@ const Messages: React.FC = () => {
   };
 
   const sendMessage = async () => {
-    if (!token || composeData.recipients.length === 0 || !composeData.subject.trim() || !composeData.content.trim()) {
+    if (!token || isSending || composeData.recipients.length === 0 || !composeData.subject.trim() || !composeData.content.trim()) {
       return;
     }
     try {
       setIsSending(true);
+      setComposeError('');
       const messageRequest: SendMessageRequest = {
         recipients: composeData.recipients.map(r => r.id),
         subject: composeData.subject,
@@ -306,17 +370,21 @@ const Messages: React.FC = () => {
         setShowCompose(false);
         setComposeData({ recipients: [], subject: '', content: '' });
         await loadMessages();
+      } else {
+        setComposeError('Nachricht konnte nicht gesendet werden. Versuche es erneut.');
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      setError('Fehler beim Senden der Nachricht.');
+      setComposeError('Nachricht konnte nicht gesendet werden. Versuche es erneut.');
     } finally {
       setIsSending(false);
     }
   };
 
   const sendReply = async () => {
-    if (!token || !selectedConversation || !replyBody.trim()) return;
+    if (!token || !selectedConversation || isReplying || !replyBody.trim()) return;
+    const failure = { id: selectedConversation, text: 'Antwort konnte nicht gesendet werden. Versuche es erneut.' };
+    setReplyError(null);
     try {
       setIsReplying(true);
       const replyRequest: ReplyMessageRequest = {
@@ -327,12 +395,22 @@ const Messages: React.FC = () => {
       const response = await messagesAPI.replyMessage(token, replyRequest);
       if (response.success) {
         void capture('message_replied');
-        setReplyBody('');
-        await loadConversation(selectedConversation);
+        setReplyDrafts(current => {
+          if (current[selectedConversation] !== replyBody) return current;
+          const next = { ...current };
+          delete next[selectedConversation];
+          return next;
+        });
+        const active = activeConversation.current;
+        if (active?.id === selectedConversation && active.token === token) {
+          await loadConversation(selectedConversation);
+        }
+      } else {
+        setReplyError(failure);
       }
     } catch (error) {
       console.error('Error sending reply:', error);
-      setError('Fehler beim Senden der Antwort.');
+      setReplyError(failure);
     } finally {
       setIsReplying(false);
     }
@@ -354,8 +432,14 @@ const Messages: React.FC = () => {
 
 
 
+  const query = messageSearch.trim().toLocaleLowerCase('de-DE');
+  const visibleMessages = messages.filter(message =>
+    !query || [message.Betreff, message.SenderName || message.Sender, ...(message.empf || [])]
+      .some(value => typeof value === 'string' && value.toLocaleLowerCase('de-DE').includes(query)),
+  );
+
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden md:h-screen">
+    <div className="flex flex-1 min-h-0 overflow-hidden">
       <SEO
         title="Nachrichten"
         description="Lanis Nachrichten — Kommuniziere mit Lehrkräften und Mitschülern über das Schulportal Hessen."
@@ -363,31 +447,33 @@ const Messages: React.FC = () => {
         noindex
       />
       {/* Messages list - hidden on mobile when conversation is selected */}
-      <div className={`${selectedConversation ? 'hidden lg:flex' : 'flex'} min-h-0 md:min-h-[auto] w-full lg:w-80 xl:w-1/3 border-r border-surface-100 dark:border-surface-800 flex-col bg-surface-50 dark:bg-surface-950 lg:bg-white lg:dark:bg-surface-900`}>
+      <div className={`${selectedConversation ? 'hidden lg:flex' : 'flex'} relative min-h-0 w-full lg:w-80 xl:w-1/3 border-r border-surface-100 dark:border-surface-800 flex-col bg-surface-50 dark:bg-surface-950 lg:bg-white lg:dark:bg-surface-900`}>
         <div className="shrink-0 md:shrink p-4 sm:p-6 lg:p-4 border-b border-surface-100 dark:border-surface-800">
           <div className="flex items-center justify-between mb-4">
             <h1 className="page-title">Nachrichten</h1>
             <button
               onClick={() => setShowCompose(true)}
-              className="btn btn-primary h-9 px-3 text-xs"
+              className="btn btn-primary hidden h-9 px-3 text-xs md:inline-flex"
             >
               <PlusIcon className="h-4 w-4 mr-1.5" />
-              Neue
+              Neue Nachricht
             </button>
           </div>
 
-          <input
-            type="text"
-            className="input text-sm"
-            placeholder="Nachrichten durchsuchen..."
-            value={messageSearch}
-            onChange={e => setMessageSearch(e.target.value)}
-          />
+          <div className="relative">
+            <MagnifyingGlassIcon aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-500" />
+            <input
+              type="search"
+              className="input pl-9"
+              aria-label="Betreff, Absender oder Empfänger suchen"
+              placeholder="Betreff, Absender, Empfänger"
+              value={messageSearch}
+              onChange={e => setMessageSearch(e.target.value)}
+            />
+          </div>
         </div>
 
-        
-
-        <div className="flex-1 overflow-y-auto">
+        <div ref={inbox} className="flex-1 overflow-y-auto pb-20 md:pb-0">
           {error && (
             <div className="m-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 rounded-xl text-xs">
               {error}
@@ -404,76 +490,82 @@ const Messages: React.FC = () => {
                 Keine Nachrichten vorhanden.
               </p>
             </div>
+          ) : visibleMessages.length === 0 ? (
+            <div className="empty-state">
+              <h3 className="empty-state-title">Keine Treffer</h3>
+              <button type="button" className="btn btn-ghost mt-2" onClick={() => setMessageSearch('')}>
+                Suche zurücksetzen
+              </button>
+            </div>
           ) : (
             <div className="divide-y divide-surface-100 dark:divide-surface-800">
-              {(messages && messages
-                .filter(message => {
-                  if (!messageSearch.trim()) return true;
-                  const search = messageSearch.toLowerCase();
-                  const subject = (message.Betreff || '').toLowerCase();
-                  const sender = (message.SenderName || message.Sender || '').toLowerCase();
-                  const empf = Array.isArray(message.empf) ? message.empf.join(' ').toLowerCase() : '';
-                  return (
-                    subject.includes(search) ||
-                    sender.includes(search) ||
-                    empf.includes(search)
-                  );
-                })
-                .map((message) => (
-                  <div
+              {visibleMessages.map(message => {
+                const selected = selectedConversation === message.Uniquid;
+                return (
+                  <button
+                    type="button"
                     key={message.Uniquid}
+                    aria-current={selected ? 'true' : undefined}
                     className={clsx(
-                      'px-4 py-3 hover:bg-surface-100 dark:hover:bg-surface-800 cursor-pointer transition-colors duration-150',
-                      selectedConversation === message.Uniquid && 'bg-surface-100 dark:bg-surface-800',
-                      message.unread && 'bg-surface-50 dark:bg-surface-800/50'
+                      'relative grid w-full grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-2.5 py-3 pl-[15px] pr-3 text-left transition-colors focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500',
+                      selected
+                        ? 'bg-primary-50 before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-primary-500 dark:bg-primary-950/40'
+                        : 'hover:bg-surface-100 dark:hover:bg-surface-800',
                     )}
                     onClick={() => loadConversation(message.Uniquid)}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-surface-100 dark:bg-surface-700 flex items-center justify-center flex-shrink-0">
-                        <UserIcon className="w-4 h-4 text-surface-400" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className={clsx(
-                            'text-sm truncate',
-                            message.unread ? 'font-semibold text-surface-900 dark:text-surface-100' : 'font-medium text-surface-700 dark:text-surface-400'
-                          )}>
-                            {message.Betreff}
-                          </p>
-                          <p className="text-[11px] text-surface-400 whitespace-nowrap">
-                            {message.date ? formatDate(message.date) : 'Heute'}
-                          </p>
-                        </div>
-                        <p className="text-xs truncate mt-0.5 text-surface-500 dark:text-surface-400">
-                          {message.SenderName || message.Sender}
-                        </p>
-                      </div>
-                      {message.unread && (
-                        <span className="w-2 h-2 rounded-full bg-primary-600 flex-shrink-0" />
-                      )}
-                    </div>
-                  </div>
-                )))}
+                    <span className={clsx('mt-1.5 h-2 w-2 rounded-full', message.unread && 'bg-primary-600 dark:bg-primary-400')}>
+                      {message.unread && <span className="sr-only">Ungelesen</span>}
+                    </span>
+                    <span className="min-w-0">
+                      <span className={clsx('block truncate text-sm text-surface-900 dark:text-surface-100', message.unread ? 'font-semibold' : 'font-medium')}>
+                        {message.Betreff || '(Ohne Betreff)'}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-surface-600 dark:text-surface-400">
+                        {message.SenderName || message.Sender}
+                      </span>
+                    </span>
+                    {message.date && (
+                      <time className="whitespace-nowrap pt-0.5 text-xs tabular-nums text-surface-600 dark:text-surface-400" title={formatDate(message.date)}>
+                        {formatInboxDate(message.date)}
+                      </time>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
+        <button
+          type="button"
+          aria-label="Neue Nachricht"
+          onClick={() => setShowCompose(true)}
+          className="btn btn-primary absolute bottom-4 right-4 z-10 h-14 w-14 rounded-full p-0 shadow-soft-lg md:hidden"
+        >
+          <PlusIcon aria-hidden="true" className="h-6 w-6" />
+        </button>
       </div>
 
       {/* Conversation view - visible on mobile only when conversation selected */}
-      <div className={`${selectedConversation ? 'flex' : 'hidden lg:flex'} flex-1 flex-col min-h-0 md:min-h-[auto] min-w-0`}>
+      <div className={`${selectedConversation ? 'flex' : 'hidden lg:flex'} flex-1 flex-col min-h-0 min-w-0`}>
         {selectedConversation ? (
           <>
             <div className="shrink-0 md:shrink border-b border-surface-100 dark:border-surface-800 p-4 bg-white/80 dark:bg-surface-900/80 backdrop-blur-sm">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <button
-                    onClick={() => setSelectedConversation(null)}
+                    aria-label="Zurück zum Posteingang"
+                    onClick={() => {
+                      activeConversation.current = null;
+                      conversationRequest.current++;
+                      setIsConversationLoading(false);
+                      setSelectedConversation(null);
+                    }}
                     className="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
                   >
                     <ArrowLeftIcon className="h-5 w-5" />
                   </button>
-                  <h2 className="text-sm font-semibold text-surface-900 dark:text-surface-100 truncate">
+                  <h2 className="item-title min-w-0 break-words">
                     {messages.find(m => m.Uniquid === selectedConversation)?.Betreff || 'Unterhaltung'}
                   </h2>
                 </div>
@@ -489,69 +581,96 @@ const Messages: React.FC = () => {
 
             {isConversationLoading ? (
               <ConversationSkeleton />
-            ) : (
-              <>
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {conversationMessages && conversationMessages.map((message) => (
-                  <div key={message.id} className="card">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center flex-shrink-0">
-                        <UserIcon className="w-4 h-4 text-primary-600 dark:text-primary-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <p className="text-sm font-medium text-surface-900 dark:text-surface-100">
-                            {message.sender}
-                          </p>
-                          <p className="text-[11px] text-surface-400 whitespace-nowrap">
-                            {formatDate(message.date)}
-                          </p>
-                        </div>
-                        <div
-                          className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-sm text-surface-700 dark:text-surface-300 leading-relaxed [&_a]:text-primary-600 [&_a:hover]:underline"
-                          dangerouslySetInnerHTML={{ __html: message.content }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            ) : conversationError ? (
+              <div className="empty-state" role="alert">
+                <p className="empty-state-text">{conversationError}</p>
+                <button className="btn btn-secondary mt-3" onClick={() => loadConversation(selectedConversation)}>Erneut versuchen</button>
               </div>
-
-              <div className="shrink-0 md:shrink border-t border-surface-100 dark:border-surface-800 p-4 bg-white/80 dark:bg-surface-900/80 backdrop-blur-sm">
-                <textarea
-                  rows={3}
-                  className="input text-sm resize-none mb-3"
-                  placeholder="Antwort schreiben..."
-                  value={replyBody}
-                  onChange={(e) => setReplyBody(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendReply();
-                    }
-                  }}
-                />
-                <div className="flex items-center justify-end">
-                  <button
-                    onClick={sendReply}
-                    disabled={isReplying || !replyBody.trim()}
-                    className="btn btn-primary h-9 text-xs disabled:opacity-50"
-                  >
-                    {isReplying ? (
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                        Senden...
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        <PaperAirplaneIcon className="h-3.5 w-3.5" />
-                        Antworten
-                      </span>
-                    )}
-                  </button>
+            ) : (
+              <div className="relative min-h-0 flex-1">
+              <div
+                ref={messageHistory}
+                className="absolute inset-x-0 top-0 bottom-[var(--reply-history-inset,30px)] overflow-y-auto px-4 pt-4 pb-[calc(var(--reply-history-overlap,22px)+1rem)] sm:px-6"
+              >
+                <div className="mx-auto max-w-3xl space-y-3">
+                  {conversationMessages.map((message, index) => {
+                    const day = formatDate(message.date).split(' ')[0];
+                    const previousDay = index > 0 ? formatDate(conversationMessages[index - 1].date).split(' ')[0] : '';
+                    return (
+                      <React.Fragment key={message.id}>
+                        {day !== previousDay && (
+                          <div className="flex items-center gap-3 py-2 text-xs text-surface-600 before:h-px before:flex-1 before:bg-surface-200 after:h-px after:flex-1 after:bg-surface-200 dark:text-surface-400 dark:before:bg-surface-700 dark:after:bg-surface-700">
+                            {isToday(parseISO(message.date)) ? 'Heute' : isYesterday(parseISO(message.date)) ? 'Gestern' : day}
+                          </div>
+                        )}
+                        <article className="card p-3 sm:p-4">
+                          <div className="mb-2 flex items-baseline justify-between gap-3">
+                            <h3 className="break-words text-sm font-semibold text-surface-900 dark:text-surface-100">{message.sender}</h3>
+                            <time className="shrink-0 text-xs text-surface-600 dark:text-surface-400" title={formatDate(message.date)}>
+                              {isValid(parseISO(message.date)) ? format(parseISO(message.date), 'HH:mm') : message.date}
+                            </time>
+                          </div>
+                          <div
+                            className="min-w-0 max-w-full whitespace-pre-line break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-surface-700 dark:text-surface-300 [&_a]:text-primary-600 dark:[&_a]:text-primary-400 [&_a:hover]:underline"
+                            dangerouslySetInnerHTML={{ __html: message.content }}
+                          />
+                        </article>
+                      </React.Fragment>
+                    );
+                  })}
+                  {conversationMessages.length === 0 && <p className="empty-state-text py-6 text-center">Keine Nachrichten in dieser Unterhaltung.</p>}
                 </div>
               </div>
-              </>
+
+              <div ref={replyComposer} className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-2 sm:px-6">
+                <div className="relative mx-auto max-w-3xl">
+                  {replyError?.id === selectedConversation && (
+                    <p role="alert" className="mb-2 text-sm text-red-600 dark:text-red-400">{replyError.text}</p>
+                  )}
+                  <div role="status" className="pointer-events-none absolute inset-x-0 bottom-full mb-2 flex justify-center">
+                    {attachmentToast?.conversation === selectedConversation && (
+                      <span className="rounded-full bg-surface-900 px-3 py-1.5 text-xs font-medium text-surface-50 shadow-soft dark:bg-surface-100 dark:text-surface-900">
+                        Coming soon™
+                      </span>
+                    )}
+                  </div>
+                  <div ref={replyPill} className="pointer-events-auto flex items-end gap-1 rounded-[1.5rem] bg-surface-100 px-1 text-sm text-surface-900 dark:bg-surface-800 dark:text-surface-100">
+                    <button
+                      type="button"
+                      aria-label="Anhang hinzufügen"
+                      onClick={() => setAttachmentToast({ conversation: selectedConversation })}
+                      className="btn btn-ghost h-11 w-11 shrink-0 rounded-full p-0 focus:ring-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
+                    >
+                      <PlusIcon aria-hidden="true" className="h-5 w-5" />
+                    </button>
+                    <textarea
+                      rows={1}
+                      className="min-h-11 min-w-0 max-h-36 flex-1 resize-none bg-transparent py-3 leading-5 outline-none placeholder:text-surface-600 dark:placeholder:text-surface-400 [field-sizing:content]"
+                      aria-label="Antwort schreiben"
+                      placeholder="Antwort schreiben…"
+                      value={replyBody}
+                      onChange={e => {
+                        const body = e.target.value;
+                        setReplyDrafts(current => ({ ...current, [selectedConversation]: body }));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={sendReply}
+                      aria-label={isReplying ? 'Antwort wird gesendet' : 'Antwort senden'}
+                      disabled={isReplying || !replyBody.trim()}
+                      className="btn btn-primary mb-1 h-9 w-9 shrink-0 rounded-full p-0 disabled:opacity-50"
+                    >
+                      {isReplying ? (
+                        <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      ) : (
+                        <ArrowUpIcon aria-hidden="true" className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              </div>
             )}
           </>
         ) : (
@@ -571,6 +690,7 @@ const Messages: React.FC = () => {
             <div className="flex items-center justify-between p-5 border-b border-surface-100 dark:border-surface-800">
               <h3 className="item-title">Neue Nachricht</h3>
               <button
+                aria-label="Neue Nachricht schließen"
                 onClick={() => setShowCompose(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
               >
@@ -580,7 +700,7 @@ const Messages: React.FC = () => {
 
             <div className="flex-1 p-5 space-y-4 overflow-y-auto">
               <div>
-                <label className="label">Empfänger</label>
+                <label className="label" htmlFor="message-recipients">Empfänger</label>
                 <div className="space-y-2">
                   {composeData.recipients.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
@@ -591,6 +711,7 @@ const Messages: React.FC = () => {
                         >
                           {recipient.name}
                           <button
+                            aria-label={`${recipient.name} entfernen`}
                             onClick={() => removeRecipient(recipient.id)}
                             className="text-primary-400 dark:text-primary-500 hover:text-primary-600 dark:hover:text-primary-300"
                           >
@@ -603,6 +724,7 @@ const Messages: React.FC = () => {
                   <div className="relative">
                     <input
                       type="text"
+                      id="message-recipients"
                       placeholder="Empfänger suchen..."
                       className="input text-sm"
                       value={recipientSearch}
@@ -635,26 +757,29 @@ const Messages: React.FC = () => {
               </div>
 
               <div>
-                <label className="label">Betreff</label>
+                <label className="label" htmlFor="message-subject">Betreff</label>
                 <input
                   type="text"
                   className="input text-sm"
+                  id="message-subject"
                   value={composeData.subject}
                   onChange={(e) => setComposeData(prev => ({ ...prev, subject: e.target.value }))}
                 />
               </div>
 
               <div>
-                <label className="label">Nachricht</label>
+                <label className="label" htmlFor="message-content">Nachricht</label>
                 <textarea
                   rows={8}
                   className="input text-sm resize-none"
+                  id="message-content"
                   value={composeData.content}
                   onChange={(e) => setComposeData(prev => ({ ...prev, content: e.target.value }))}
                 />
               </div>
             </div>
 
+            {composeError && <p role="alert" className="px-5 pb-3 text-sm text-red-600 dark:text-red-400">{composeError}</p>}
             <div className="flex items-center justify-end gap-3 p-5 border-t border-surface-100 dark:border-surface-800">
               <button
                 onClick={() => setShowCompose(false)}
@@ -691,6 +816,7 @@ const Messages: React.FC = () => {
             <div className="flex items-center justify-between p-5 border-b border-surface-100 dark:border-surface-700">
               <h3 className="item-title">Teilnehmer</h3>
               <button
+                aria-label="Teilnehmer schließen"
                 onClick={closeParticipantsModal}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
               >

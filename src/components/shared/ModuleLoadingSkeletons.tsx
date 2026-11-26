@@ -3,7 +3,6 @@ import {
   ChartBarIcon,
   DocumentTextIcon,
   FolderIcon,
-  UserIcon,
 } from '@heroicons/react/24/outline';
 
 const Bar: React.FC<{ className?: string }> = ({ className = '' }) => (
@@ -198,24 +197,18 @@ export const AttendanceSkeleton = () => (
 export const ConversationSkeleton = () => (
   <Loading
     label="Nachrichtenverlauf wird geladen"
-    className="flex-1 overflow-y-auto p-6"
+    className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6"
   >
-    <div className="space-y-4">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="card">
-          <div className="flex items-start gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/50">
-              <UserIcon className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="mb-2 flex justify-between gap-2">
-                <Bar className="h-5 w-28" />
-                <Bar className="h-4 w-16" />
-              </div>
-              <Bar className="h-5 w-full" />
-              <Bar className="mt-1 h-5 w-3/4" />
-            </div>
+    <div className="mx-auto max-w-3xl space-y-3">
+      <Bar className="mx-auto my-2 h-3 w-16" />
+      {[0, 1, 2].map(i => (
+        <div key={i} className="card p-3 sm:p-4">
+          <div className="mb-2 flex justify-between gap-2">
+            <Bar className="h-5 w-28" />
+            <Bar className="h-4 w-12" />
           </div>
+          <Bar className="h-5 w-full" />
+          <Bar className="mt-1 h-5 w-3/4" />
         </div>
       ))}
     </div>
