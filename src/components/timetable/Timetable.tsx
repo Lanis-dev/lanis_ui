@@ -141,7 +141,7 @@ const Timetable: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full module-padding">
+    <div className="min-h-full overflow-x-clip module-padding">
       <SEO title="Stundenplan" description="Dein persönlicher Stundenplan im Schulportal Hessen." path="/timetable" noindex />
       <div className="mx-auto max-w-7xl">
         <header className="page-header">
@@ -181,7 +181,7 @@ const Timetable: React.FC = () => {
         </div>
 
         {cachedAt && <p role="status" className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">Gespeicherter Stundenplan · Stand {new Date(cachedAt).toLocaleString('de-DE')}. Neuere Änderungen können fehlen.</p>}
-        <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-surface-500 dark:text-surface-400">
+        <div role="status" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-surface-500 [overflow-wrap:anywhere] dark:text-surface-400">
           {loading && <span className="skeleton inline-block h-4 w-32" aria-hidden="true" />}
           {substitutionSources.map(source => <span key={source.name} className={source.error ? 'text-amber-700 dark:text-amber-300' : ''}>
             {source.name}: {source.error ? 'nicht geladen – Änderungen können fehlen' : source.updated ? `Stand ${formatSourceDate(source.updated)}` : 'abgeglichen'}
@@ -197,7 +197,7 @@ const Timetable: React.FC = () => {
         )}
 
         {error && data && (
-          <p role="status" className="mb-4 text-sm text-amber-700 dark:text-amber-300">Aktualisierung fehlgeschlagen. Der zuletzt geladene Stand wird angezeigt. {error}</p>
+          <p role="status" className="mb-4 text-sm text-amber-700 [overflow-wrap:anywhere] dark:text-amber-300">Aktualisierung fehlgeschlagen. Der zuletzt geladene Stand wird angezeigt. {error}</p>
         )}
         {loading ? (
           <TimetableSkeleton dates={loadingDates} layoutMode={preferences.timetable.layout_mode} />
