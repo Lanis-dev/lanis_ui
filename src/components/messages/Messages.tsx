@@ -494,10 +494,10 @@ const Messages: React.FC = () => {
                     key={message.Uniquid}
                     aria-current={selected ? 'true' : undefined}
                     className={clsx(
-                      'relative grid w-full grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-2.5 border-l-[3px] px-3 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500',
+                      'relative grid w-full grid-cols-[0.5rem_minmax(0,1fr)_auto] items-start gap-2.5 py-3 pl-[15px] pr-3 text-left transition-colors focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500',
                       selected
-                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40'
-                        : 'border-transparent hover:bg-surface-100 dark:hover:bg-surface-800',
+                        ? 'bg-primary-50 before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-primary-500 dark:bg-primary-950/40'
+                        : 'hover:bg-surface-100 dark:hover:bg-surface-800',
                     )}
                     onClick={() => loadConversation(message.Uniquid)}
                   >
@@ -624,7 +624,7 @@ const Messages: React.FC = () => {
                       type="button"
                       aria-label="Anhang hinzufügen"
                       onClick={() => setAttachmentToast({ conversation: selectedConversation })}
-                      className="btn btn-ghost h-11 w-10 shrink-0 rounded-full p-0 focus:ring-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
+                      className="btn btn-ghost h-11 w-11 shrink-0 rounded-full p-0 focus:ring-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
                     >
                       <PlusIcon aria-hidden="true" className="h-5 w-5" />
                     </button>
