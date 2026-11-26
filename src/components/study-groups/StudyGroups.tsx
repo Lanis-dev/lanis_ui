@@ -127,12 +127,11 @@ const StudyGroups: React.FC = () => {
                         .join('') || teacher.krz.slice(0, 2);
                       const openMessageComposer = () => {
                         const params = new URLSearchParams({
-                          compose: '1',
                           recipient: teacher.recipient_id || '',
                           recipientName: name,
                           recipientUsername: teacher.krz,
                         });
-                        navigate(`${basePath}/messages?${params.toString()}`);
+                        navigate(`${basePath}/messages/draft?${params.toString()}`);
                       };
                       return (
                         <div key={`${teacher.krz}-${index}`} className="flex items-center justify-between gap-3 py-1.5 text-sm">

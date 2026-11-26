@@ -593,7 +593,7 @@ export const messagesAPI = {
     signal?: AbortSignal,
   ): Promise<ConversationResponse> {
     const response = await apiClient.get<ConversationResponse>(
-      `/nachrichten/${conversationId}`,
+      `/nachrichten/${encodeURIComponent(conversationId)}`,
       {
         headers: { 'X-Session-Token': token },
         params: { last },

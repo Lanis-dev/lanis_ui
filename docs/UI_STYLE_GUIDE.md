@@ -44,7 +44,7 @@ A/B school-week markers use `week-tag` with `week-tag-a` (primary) or `week-tag-
 
 ## Intentional exceptions
 
-Messaging is a full-height split pane: retain its own scrolling, pane borders and compact controls. On phones, fill the layout’s available height with flex sizing so the demo bar, mobile header, Android navigation and status notices leave room for the panes. The inbox and conversation body scroll while the pane headers and reply composer stay visible. Keep the full-height split pane on larger screens. Its h1 uses the standard `page-title`; the mobile inbox uses the surrounding module background. Calendar retains its height and scrolling constraints. Timetables retain their dense cells. These content layouts do not change the surrounding module typography or gutters.
+Messaging is a full-height split pane: retain its own scrolling, pane borders and compact controls. On phones, fill the layout’s available height with flex sizing so the demo bar, mobile header, Android navigation and status notices leave room for the panes. The inbox, conversation body and draft fields scroll while pane headers, the reply composer and draft send action stay visible. On larger screens the conversation and draft share the right pane alongside the inbox. Its inbox heading uses the standard `page-title`; the mobile inbox uses the surrounding module background. Calendar retains its height and scrolling constraints. Timetables retain their dense cells. These content layouts do not change the surrounding module typography or gutters.
 
 ## Review checklist
 

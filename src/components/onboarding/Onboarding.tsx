@@ -1,6 +1,7 @@
 import { capture } from '../../analytics/client';
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { messagesReturnPath } from '../../utils/messageRoutes';
 import {
   AcademicCapIcon,
   ArrowLeftIcon,
@@ -47,6 +48,8 @@ const themeColors: Array<{ id: ThemeColor; label: string; hex: string; checkClas
 
 const Onboarding: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const destination = messagesReturnPath(location.state?.messagesReturnTo) || '/dashboard';
   const { user } = useAuth();
   // Keep the persisted guide ID compatible with onboarding already in progress.
   const steps = user?.is_first_school_user === 'true'
@@ -163,7 +166,7 @@ const Onboarding: React.FC = () => {
       homework: original.homework,
       onboarding: { version: CURRENT_ONBOARDING_VERSION, status: 'skipped', last_step: 'complete' },
     });
-    navigate('/dashboard', { replace: true });
+    navigate(destination, { replace: true });
   };
 
   const complete = () => {
@@ -180,7 +183,7 @@ const Onboarding: React.FC = () => {
       homework: { hide_completed_in_overview: hideCompletedHomework },
       onboarding: { version: CURRENT_ONBOARDING_VERSION, status: 'completed', last_step: 'complete' },
     });
-    navigate('/dashboard', { replace: true });
+    navigate(destination, { replace: true });
   };
 
   if (isLoading) {

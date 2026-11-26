@@ -253,6 +253,26 @@ html.oled ::-webkit-scrollbar-thumb {
            placeholder:text-surface-400 dark:placeholder:text-surface-500;
   }
 
+  .message-recipient-input[aria-controls] {
+    @apply rounded-b-none border-primary-400 focus:ring-0;
+  }
+
+  html:has(#message-recipient-results[data-side="top"]) .message-recipient-input[aria-controls] {
+    @apply rounded-b-xl rounded-t-none;
+  }
+
+  .message-recipient-results {
+    @apply rounded-xl border border-primary-400 bg-white shadow-soft-lg dark:bg-surface-800;
+  }
+
+  .message-recipient-results[data-side="bottom"] {
+    @apply rounded-t-none border-t-surface-200 dark:border-t-surface-700;
+  }
+
+  .message-recipient-results[data-side="top"] {
+    @apply rounded-b-none border-b-surface-200 dark:border-b-surface-700;
+  }
+
   .input-error {
     @apply border-red-300 dark:border-red-600 focus:ring-red-500/25 focus:border-red-400;
   }

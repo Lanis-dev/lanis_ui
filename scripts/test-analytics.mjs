@@ -11,6 +11,7 @@ const policyCode = ts.transpileModule(policySource, { compilerOptions: { module:
 const policy = await import(`data:text/javascript;base64,${Buffer.from(policyCode).toString('base64')}`);
 assert.equal(policy.routeLabel('/courses/private-school-course'), '/courses/:id');
 assert.equal(policy.routeLabel('/demo/messages'), '/messages');
+assert.equal(policy.routeLabel('/messages/private-conversation'), '/messages');
 assert.equal(policy.routeLabel('/settings/arbitrary-private-value'), '/other');
 assert.equal(policy.routeLabel('/unknown/person@example.com'), '/other');
 assert.equal(policy.routeLabel('/settings/account/'), '/settings/account');

@@ -70,7 +70,8 @@ const Layout: React.FC<LayoutProps> = ({ children, basePath = '' }) => {
   const isDemo = basePath === '/demo';
   const location = useLocation();
   const [isMobile, setIsMobile] = React.useState(() => window.matchMedia('(max-width: 767px)').matches);
-  const isMessagesPage = location.pathname.replace(/\/+$/, '') === `${basePath}/messages`;
+  const messagesPath = `${basePath}/messages`;
+  const isMessagesPage = location.pathname === messagesPath || location.pathname.startsWith(messagesPath + '/');
 
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [isSidebarClosing, setIsSidebarClosing] = React.useState(false);
