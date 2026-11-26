@@ -65,6 +65,7 @@ const Messages: React.FC = () => {
     } catch { return []; }
   });
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const activeConversation = useRef<string | null>(null);
   const [conversations, setConversations] = useCachedState<Record<string, Message[]>>('conversations', {});
   const conversationMessages = selectedConversation ? conversations[selectedConversation] || [] : [];
   const [isLoading, setIsLoading] = useState(true);
@@ -182,7 +183,11 @@ const Messages: React.FC = () => {
     if (!token) return;
     const abortController = new AbortController();
     loadMessages(abortController.signal);
-    return () => { abortController.abort(); conversationRequest.current++; };
+    return () => {
+      abortController.abort();
+      activeConversation.current = null;
+      conversationRequest.current++;
+    };
   }, [token]);
 
   useEffect(() => {
@@ -259,6 +264,7 @@ const Messages: React.FC = () => {
     if (inbox.current?.getClientRects().length) inboxScroll.current = inbox.current.scrollTop;
     try {
       setIsConversationLoading(conversations[conversationId] === undefined);
+      activeConversation.current = conversationId;
       setSelectedConversation(conversationId);
       const response = await messagesAPI.getConversation(token, conversationId);
       if (requestId !== conversationRequest.current) return;
@@ -372,7 +378,6 @@ const Messages: React.FC = () => {
 
   const sendReply = async () => {
     if (!token || !selectedConversation || isReplying || !replyBody.trim()) return;
-    const requestId = conversationRequest.current;
     const failure = { id: selectedConversation, text: 'Antwort konnte nicht gesendet werden. Versuche es erneut.' };
     setReplyError(null);
     try {
@@ -391,7 +396,7 @@ const Messages: React.FC = () => {
           delete next[selectedConversation];
           return next;
         });
-        if (requestId === conversationRequest.current) await loadConversation(selectedConversation);
+        if (activeConversation.current === selectedConversation) await loadConversation(selectedConversation);
       } else {
         setReplyError(failure);
       }
@@ -543,6 +548,7 @@ const Messages: React.FC = () => {
                   <button
                     aria-label="Zurück zum Posteingang"
                     onClick={() => {
+                      activeConversation.current = null;
                       conversationRequest.current++;
                       setSelectedConversation(null);
                     }}
