@@ -53,8 +53,6 @@ export const eventRules = {
   file_search_submitted: {},
   course_opened: { source: ['course_list', 'timetable'] },
   course_tab_selected: { tab: ['history', 'performance', 'exams'] },
-  course_filter_changed: { homework_only: [true, false] },
-  course_view_changed: { view: ['cards', 'timeline'] },
   timetable_scope_changed: { scope: ['personal', 'all'] },
   timetable_week_changed: {},
   calendar_view_changed: { view: ['month', 'list'] },
