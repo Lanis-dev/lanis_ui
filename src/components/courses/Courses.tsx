@@ -42,7 +42,6 @@ import {
   ExclamationCircleIcon,
   ChartBarIcon,
   ListBulletIcon,
-  Squares2X2Icon,
   ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline';
 import { format, parseISO } from 'date-fns';
@@ -333,9 +332,7 @@ const Courses: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [filterAttendance, setFilterAttendance] = useState<string>('all');
-  const [showOnlyHomework, setShowOnlyHomework] = useState(false);
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
-  const [detailViewMode, setDetailViewMode] = useState<'cards' | 'timeline'>('cards');
   const dynamicAttendanceOptions = [...new Set((selectedCourse?.entries || []).map(entry => entry.attendance.trim()).filter(Boolean))]
     .filter(att => !['anwesend', 'entschuldigt', 'unentschuldigt', 'fehlend'].includes(att.toLowerCase()));
   const [courseDetailTab, setCourseDetailTab] = useState<CourseDetailTab>('history');
@@ -631,74 +628,31 @@ const Courses: React.FC = () => {
     </div>
   );
 
-  const historyControl = 'inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500';
-  const historyControlIdle = 'text-surface-700 hover:bg-surface-100 dark:text-surface-300 dark:hover:bg-surface-700';
-  const historyControlActive = 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200';
-
   const courseFilters = (
-    <div className="flex flex-wrap items-center justify-between gap-2" role="group" aria-label="Historienansicht">
-      <div className="flex min-w-0 flex-[1_1_12.5rem] items-center gap-2">
-        <Select
-          aria-label="Anwesenheit filtern"
-          value={filterAttendance}
-          onValueChange={(value) => setFilterAttendance(value)}
-          className="h-11 min-w-0 flex-1 px-2.5 text-sm"
-        >
-          <SelectOption value="all">Alle Einträge</SelectOption>
-          <SelectOption value="anwesend">Anwesend</SelectOption>
-          <SelectOption value="entschuldigt">Entschuldigt</SelectOption>
-          <SelectOption value="unentschuldigt">Unentschuldigt</SelectOption>
-          <SelectOption value="fehlend">Fehlend</SelectOption>
-          {dynamicAttendanceOptions.map((option) => (
-            <SelectOption key={option} value={option}>{option}</SelectOption>
-          ))}
-        </Select>
-        <button
-          type="button"
-          aria-label="Nur Hausaufgaben"
-          aria-pressed={showOnlyHomework}
-          onClick={() => {
-            void capture('course_filter_changed', { homework_only: !showOnlyHomework });
-            setShowOnlyHomework(!showOnlyHomework);
-          }}
-          className={clsx(historyControl, 'whitespace-nowrap border border-surface-200 px-2.5 dark:border-surface-700', showOnlyHomework ? historyControlActive : historyControlIdle)}
-        >
-          Nur HA
-        </button>
-      </div>
-
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          aria-label={sortOrder === 'newest' ? 'Neueste zuerst, Reihenfolge umkehren' : 'Älteste zuerst, Reihenfolge umkehren'}
-          onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
-          className={clsx(historyControl, historyControlIdle, 'min-w-11 px-2.5')}
-        >
-          {sortOrder === 'newest' ? '↓ Neu' : '↑ Alt'}
-        </button>
-
-        <div className="flex rounded-lg bg-surface-100 dark:bg-surface-800" role="group" aria-label="Darstellung">
-          {([
-            { mode: 'cards', label: 'Kartenansicht', Icon: Squares2X2Icon },
-            { mode: 'timeline', label: 'Timeline-Ansicht', Icon: ListBulletIcon },
-          ] as const).map(({ mode, label, Icon }) => (
-            <button
-              key={mode}
-              type="button"
-              aria-label={label}
-              aria-pressed={detailViewMode === mode}
-              title={label}
-              onClick={() => {
-                if (detailViewMode !== mode) void capture('course_view_changed', { view: mode });
-                setDetailViewMode(mode);
-              }}
-              className={clsx(historyControl, 'w-11', detailViewMode === mode ? historyControlActive : historyControlIdle)}
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="flex items-center gap-2" role="group" aria-label="Historieneinträge filtern und sortieren">
+      <Select
+        aria-label="Anwesenheit filtern"
+        value={filterAttendance}
+        onValueChange={(value) => setFilterAttendance(value)}
+        className="h-11 min-w-0 flex-1 px-2.5 text-sm"
+      >
+        <SelectOption value="all">Alle Einträge</SelectOption>
+        <SelectOption value="anwesend">Anwesend</SelectOption>
+        <SelectOption value="entschuldigt">Entschuldigt</SelectOption>
+        <SelectOption value="unentschuldigt">Unentschuldigt</SelectOption>
+        <SelectOption value="fehlend">Fehlend</SelectOption>
+        {dynamicAttendanceOptions.map((option) => (
+          <SelectOption key={option} value={option}>{option}</SelectOption>
+        ))}
+      </Select>
+      <button
+        type="button"
+        aria-label={sortOrder === 'newest' ? 'Neueste zuerst, Reihenfolge umkehren' : 'Älteste zuerst, Reihenfolge umkehren'}
+        onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
+        className="inline-flex h-11 min-w-11 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-2.5 text-sm font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 dark:text-surface-300 dark:hover:bg-surface-700"
+      >
+        {sortOrder === 'newest' ? '↓ Neu' : '↑ Alt'}
+      </button>
     </div>
   );
 
@@ -866,7 +820,6 @@ const Courses: React.FC = () => {
                   if (filterAttendance === 'fehlend' && lowerAtt !== 'fehlend' && lowerAtt !== 'unentschuldigt') return false;
                   if (!['anwesend', 'entschuldigt', 'unentschuldigt', 'fehlend'].includes(filterAttendance.toLowerCase()) && trimmedAttendance !== filterAttendance) return false;
                 }
-                if (showOnlyHomework && !entry.homework.trim()) return false;
                 return true;
               });
 
@@ -899,13 +852,13 @@ const Courses: React.FC = () => {
                     <FunnelIcon className="mx-auto h-12 w-12 text-surface-400 dark:text-surface-500" />
                     <h3 className="mt-2 empty-state-title">Keine passenden Einträge</h3>
                     <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
-                      Versuchen Sie, die Filter anzupassen.
+                      Wähle einen anderen Anwesenheitsfilter.
                     </p>
                   </div>
                 );
               }
 
-              return detailViewMode === 'cards' ? (
+              return (
                 <div className="space-y-4">
                   {filteredEntries.map((entry) => (
                     <div
@@ -1056,118 +1009,6 @@ const Courses: React.FC = () => {
                       <UploadButtons uploads={entry.uploads} onOpen={openUpload} />
                     </div>
                   ))}
-                </div>
-              ) : (
-                // Timeline view
-                <div className="relative">
-                  <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary-500 via-primary-300 to-transparent"></div>
-                  <div className="space-y-6">
-                    {filteredEntries.map((entry, index) => (
-                      <div key={entry.entry_id} className="relative pl-20">
-                        <div className="absolute left-5 top-6 h-6 w-6 rounded-full bg-primary-600 border-4 border-white dark:border-surface-900 shadow-md flex items-center justify-center">
-                          <div className="h-2 w-2 rounded-full bg-white dark:bg-surface-300"></div>
-                        </div>
-                        
-                        <div className="card bg-transparent hover:shadow-lg transition-shadow duration-200">
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <div className="text-xs text-surface-500 mb-1">
-                                Eintrag #{filteredEntries.length - index}
-                              </div>
-                              <div className="text-sm font-semibold text-surface-900 dark:text-surface-100">{formatDate(entry.date) || entry.hours}</div>
-                              {entry.attendance && (
-                                <span className={clsx(
-                                  "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-1",
-                                  entry.attendance.trim().toLowerCase() === 'anwesend' || entry.attendance.trim().toLowerCase() === 'entschuldigt' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
-                                  entry.attendance.trim().toLowerCase() === 'fehlend' || entry.attendance.trim().toLowerCase() === 'unentschuldigt' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
-                                  'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
-                                )}>
-                                  {entry.attendance}
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div className="flex items-center gap-2">
-                              {entry.homework && (
-                                <span className={clsx(
-                                  "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
-                                  entry.homework_done
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-100'
-                                    : 'bg-secondary-100 dark:bg-secondary-900/40 text-secondary-800 dark:text-secondary-100'
-                                )} title={entry.homework_done ? 'Hausaufgaben erledigt' : 'Hausaufgaben offen'}>
-                                  HA
-                                </span>
-                              )}
-                              {entry.files && entry.files.length > 0 && (
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
-                                  {entry.files.length} <PaperClipIcon className="h-3 w-3 ml-1" />
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <h4 className="item-title mb-3">{entry.thema}</h4>
-
-                          {entry.content && (
-                            <div
-                              className="mb-3 text-sm text-surface-700 dark:text-surface-300 leading-relaxed [&_br]:mb-1"
-                              dangerouslySetInnerHTML={{ __html: entry.content }}
-                            />
-                          )}
-
-                          {entry.homework && (
-                            <div className={entry.homework_done ? 'mb-3 rounded border-l-4 border-green-400 bg-green-50/60 p-3 dark:border-green-500 dark:bg-green-950/25' : 'mb-3 rounded border-l-4 border-secondary-400 bg-secondary-50/60 p-3 dark:border-secondary-500 dark:bg-secondary-950/25'}>
-                              <div className="flex items-center gap-2 mb-1">
-                                <ClockIcon className={entry.homework_done ? 'h-4 w-4 text-green-700 dark:text-green-300' : 'h-4 w-4 text-secondary-700 dark:text-secondary-300'} />
-                                <span className={entry.homework_done ? 'text-xs font-semibold text-green-900 dark:text-green-100' : 'text-xs font-semibold text-secondary-900 dark:text-secondary-100'}>Hausaufgaben</span>
-                                <button
-                                  disabled={isUpdating}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleHomework(selectedCourse.course_id, entry.entry_id, entry.homework_done);
-                                  }}
-                                  className="focus:outline-none"
-                                  title={entry.homework_done ? 'Als nicht erledigt markieren' : 'Als erledigt markieren'}
-                                >
-                                  <CheckCircleIcon className={clsx(
-                                    "h-4 w-4 transition-colors",
-                                    entry.homework_done
-                                      ? "text-green-600 dark:text-green-400"
-                                      : "text-surface-300 dark:text-surface-600 hover:text-green-600 dark:hover:text-green-400"
-                                  )} />
-                                </button>
-                              </div>
-                              <div className={entry.homework_done ? 'whitespace-pre-wrap text-xs text-green-900 dark:text-green-100' : 'whitespace-pre-wrap text-xs text-secondary-900 dark:text-secondary-100'}>{entry.homework?.trim()}</div>
-                            </div>
-                          )}
-                          
-                          {entry.files && entry.files.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-3">
-                              {entry.files.map((file, fileIndex) => (
-                                <a
-                                  key={fileIndex}
-                                  href={file.url !== '#' ? file.url : undefined}
-                                  onClick={(event) => downloadCourseAttachment(event, file.url, file.name)}
-                                  className={clsx(
-                                    "inline-flex items-center px-3 py-1.5 rounded-lg text-xs border",
-                                    file.url !== '#'
-                                      ? "border-primary-200 text-primary-700 cursor-pointer"
-                                      : "border-surface-200 dark:border-surface-700 text-surface-400 dark:text-surface-500 cursor-not-allowed"
-                                  )}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <DocumentTextIcon className="h-3 w-3 mr-1" />
-                                  {file.name}
-                                </a>
-                              ))}
-                            </div>
-                          )}
-                          <UploadButtons uploads={entry.uploads} onOpen={openUpload} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               );
             })()
