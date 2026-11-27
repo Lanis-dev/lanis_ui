@@ -7,7 +7,12 @@ const compiled = ts.transpileModule(fs.readFileSync('src/utils/search.ts', 'utf8
 }).outputText;
 const loaded = { exports: {} };
 vm.runInNewContext(compiled, { module: loaded, exports: loaded.exports });
-const { searchText, searchScore, rankSearchResults, messageSearchData, compactSearchResults } = loaded.exports;
+const { searchText, searchScore, rankSearchResults, messageSearchData, compactSearchResults, recipientSearchSubtitle } = loaded.exports;
+assert.equal(recipientSearchSubtitle(' LuL ', ''), 'Lehrkraft');
+assert.equal(recipientSearchSubtitle('SuS', ' mk '), 'Schülerkonto · mk');
+assert.equal(recipientSearchSubtitle('Lehrkraft', 'cn'), 'Lehrkraft · cn');
+assert.equal(recipientSearchSubtitle('usr', 'cn'), 'cn');
+assert.equal(recipientSearchSubtitle('usr'), 'Nutzer');
 assert(searchText('  MÜLLER   mathe ', { name: 'Mathematik', teacher: 'Müller' }));
 assert(searchText('mueller', 'Müller'));
 assert(searchText('strasse', 'Straße'));

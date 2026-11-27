@@ -1,4 +1,15 @@
 /** Shared matching and ordering for local and live global-search results. */
+export function recipientSearchSubtitle(type?: string, username?: string): string {
+  const accountType = type?.trim().toLowerCase();
+  let label = '';
+  if (accountType === 'lul' || accountType === 'lehrkraft') {
+    label = 'Lehrkraft';
+  } else if (accountType === 'sus' || accountType === 'schüler/in') {
+    label = 'Schülerkonto';
+  }
+  return [label, username?.trim()].filter(Boolean).join(' · ') || 'Nutzer';
+}
+
 export function normalizeSearchText(value: unknown): string {
   if (typeof value !== 'string' && typeof value !== 'number') return '';
   return String(value).toLocaleLowerCase('de-DE')

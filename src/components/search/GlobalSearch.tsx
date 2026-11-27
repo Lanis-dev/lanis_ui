@@ -1,6 +1,6 @@
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useDialogFocus } from '../../hooks/useDialogFocus';
-import { searchText, rankSearchResults, messageSearchData, compactSearchResults } from '../../utils/search';
+import { searchText, rankSearchResults, messageSearchData, compactSearchResults, recipientSearchSubtitle } from '../../utils/search';
 import { resultCountBucket, searchCategory } from '../../analytics/policy';
 import { capture } from '../../analytics/client';
 import { readPersonalCache } from '../../utils/accountDataWrites';
@@ -450,7 +450,7 @@ export default function GlobalSearch({
           !res.success ? [] : res.results.filter(user => searchText(query, [user.name, user.username])).map(user => ({
             id: `api-usr-${user.id}`,
             title: user.name || user.username,
-            subtitle: user.type ? `${user.type} · ${user.username}` : user.username,
+            subtitle: recipientSearchSubtitle(user.type, user.username),
             category: 'Nutzer', icon: UserIcon,
             href: `/messages/draft?${new URLSearchParams({
               recipient: user.id,
