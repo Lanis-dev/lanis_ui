@@ -3,9 +3,9 @@ export function recipientSearchSubtitle(type?: string, username?: string): strin
   const accountType = type?.trim().toLowerCase();
   let label = '';
   if (accountType === 'lul' || accountType === 'lehrkraft') {
-    label = 'Lehrkraft';
+    label = 'Lehrer';
   } else if (accountType === 'sus' || accountType === 'schüler/in') {
-    label = 'Schülerkonto';
+    label = 'Schüler';
   }
   return [label, username?.trim()].filter(Boolean).join(' · ') || 'Nutzer';
 }
