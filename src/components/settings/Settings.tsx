@@ -1,6 +1,5 @@
 import BackButton from '../BackButton';
 import { TimeInput } from '../ui/TimeInput';
-import { Select, SelectOption } from '../ui/Select';
 import { ThemeColorPicker } from './ThemeColorPicker';
 import { authStorage, flushAuthStorage } from '../../platform/authStorage';
 import { saveBlob } from '../../platform/files';
@@ -1385,15 +1384,15 @@ const Settings: React.FC = () => {
                 </label>
                 {notificationPrefs.vertretungsplan_enabled && (
                   <p className="ml-7 mt-1 text-xs text-surface-500">
-                    Es wird die Klasse „{preferences.vertretungsplan.class_override.trim() || 'automatisch erkannte Klasse'}“ aus „Stundenplan &amp; Vertretungsplan“ verwendet.
+                    Es wird die Klasse „{preferences.vertretungsplan.class_override.trim() || 'automatisch erkannte Klasse'}“ aus „Stundenplan &amp; Vertretungsplan“ verwendet. DSBmobile wird von 07:00 bis 16:00 Uhr (Berlin) alle fünf Minuten geprüft.
                   </p>
                 )}
               </div>
             </fieldset>}
 
             {notificationPrefs.enabled && <fieldset>
-              <legend className="item-title mb-3">Aktive Zeiten</legend>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <legend className="item-title mb-3">Zeiten für Nachrichten und Schulportal-Vertretungen</legend>
+              <div className="grid gap-4 sm:grid-cols-2">
               <div>
                   <TimeInput
                     id="notification-start" label="Von"
@@ -1411,20 +1410,6 @@ const Settings: React.FC = () => {
                     onValueChange={value => setNotificationPrefs(previous => ({ ...previous, end_time: value }))}
                     disabled={notificationsLoading || notificationsSaving}
                   />
-              </div>
-              <div>
-                <label className="label" htmlFor="notification-interval">Prüfintervall</label>
-                <Select
-                  id="notification-interval"
-                  className="input text-sm"
-                  value={notificationPrefs.poll_interval_minutes}
-                  onValueChange={value => setNotificationPrefs(previous => ({ ...previous, poll_interval_minutes: Number(value) }))}
-                  disabled={notificationsLoading || notificationsSaving}
-                >
-                  {[5, 10, 15, 30, 60].map(minutes => (
-                    <SelectOption key={minutes} value={minutes}>{minutes} Minuten</SelectOption>
-                  ))}
-                </Select>
               </div>
               </div>
             </fieldset>}
