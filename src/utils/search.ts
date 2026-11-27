@@ -1,4 +1,25 @@
 /** Shared matching and ordering for local and live global-search results. */
+export function recipientSearchLabels(name: string, type?: string, username?: string) {
+  const accountType = type?.trim().toLowerCase();
+  const shortName = username?.trim() || '';
+  const title = name?.trim() || shortName;
+
+  if (accountType === 'lul' || accountType === 'lehrkraft') {
+    const normalizedTitle = title.toLowerCase();
+    const normalizedShortName = shortName.toLowerCase();
+    const showShortName = shortName
+      && normalizedTitle !== normalizedShortName
+      && !normalizedTitle.endsWith(`(${normalizedShortName})`);
+    return {
+      title: showShortName ? `${title} (${shortName})` : title,
+      subtitle: 'Lehrer',
+    };
+  }
+
+  const label = accountType === 'sus' || accountType === 'schüler/in' ? 'Schüler' : '';
+  return { title, subtitle: [label, shortName].filter(Boolean).join(' · ') || 'Nutzer' };
+}
+
 export function normalizeSearchText(value: unknown): string {
   if (typeof value !== 'string' && typeof value !== 'number') return '';
   return String(value).toLocaleLowerCase('de-DE')

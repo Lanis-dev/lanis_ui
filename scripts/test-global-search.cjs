@@ -7,7 +7,14 @@ const compiled = ts.transpileModule(fs.readFileSync('src/utils/search.ts', 'utf8
 }).outputText;
 const loaded = { exports: {} };
 vm.runInNewContext(compiled, { module: loaded, exports: loaded.exports });
-const { searchText, searchScore, rankSearchResults, messageSearchData, compactSearchResults } = loaded.exports;
+const { searchText, searchScore, rankSearchResults, messageSearchData, compactSearchResults, recipientSearchLabels } = loaded.exports;
+assert.deepEqual({ ...recipientSearchLabels('Clara Neumann', ' LuL ', ' cn ') }, { title: 'Clara Neumann (cn)', subtitle: 'Lehrer' });
+assert.deepEqual({ ...recipientSearchLabels('Clara Neumann (CN)', 'LuL', 'cn') }, { title: 'Clara Neumann (CN)', subtitle: 'Lehrer' });
+assert.deepEqual({ ...recipientSearchLabels('Clara Neumann', 'Lehrkraft') }, { title: 'Clara Neumann', subtitle: 'Lehrer' });
+assert.deepEqual({ ...recipientSearchLabels('', 'LuL', 'cn') }, { title: 'cn', subtitle: 'Lehrer' });
+assert.deepEqual({ ...recipientSearchLabels('Mia Keller', 'SuS', ' mk ') }, { title: 'Mia Keller', subtitle: 'Schüler · mk' });
+assert.equal(recipientSearchLabels('Clara Neumann', 'usr', 'cn').subtitle, 'cn');
+assert.equal(recipientSearchLabels('Clara Neumann', 'usr').subtitle, 'Nutzer');
 assert(searchText('  MÜLLER   mathe ', { name: 'Mathematik', teacher: 'Müller' }));
 assert(searchText('mueller', 'Müller'));
 assert(searchText('strasse', 'Straße'));
