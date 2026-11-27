@@ -1,13 +1,23 @@
 /** Shared matching and ordering for local and live global-search results. */
-export function recipientSearchSubtitle(type?: string, username?: string): string {
+export function recipientSearchLabels(name: string, type?: string, username?: string) {
   const accountType = type?.trim().toLowerCase();
-  let label = '';
+  const shortName = username?.trim() || '';
+  const title = name?.trim() || shortName;
+
   if (accountType === 'lul' || accountType === 'lehrkraft') {
-    label = 'Lehrer';
-  } else if (accountType === 'sus' || accountType === 'schüler/in') {
-    label = 'Schüler';
+    const normalizedTitle = title.toLowerCase();
+    const normalizedShortName = shortName.toLowerCase();
+    const showShortName = shortName
+      && normalizedTitle !== normalizedShortName
+      && !normalizedTitle.endsWith(`(${normalizedShortName})`);
+    return {
+      title: showShortName ? `${title} (${shortName})` : title,
+      subtitle: 'Lehrer',
+    };
   }
-  return [label, username?.trim()].filter(Boolean).join(' · ') || 'Nutzer';
+
+  const label = accountType === 'sus' || accountType === 'schüler/in' ? 'Schüler' : '';
+  return { title, subtitle: [label, shortName].filter(Boolean).join(' · ') || 'Nutzer' };
 }
 
 export function normalizeSearchText(value: unknown): string {
