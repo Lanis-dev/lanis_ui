@@ -109,11 +109,12 @@ const Layout: React.FC<LayoutProps> = ({ children, basePath = '' }) => {
   React.useLayoutEffect(() => {
     if (!mainRef.current || isMessagesPage) return;
     const mobile = window.matchMedia('(max-width: 767px)');
+    const autoHide = () => androidPresentation ? 'scroll' : mobile.matches ? 'never' : 'leave';
     const scrollbar = OverlayScrollbars(mainRef.current, {
-      scrollbars: { theme: 'os-theme-dark', autoHide: mobile.matches ? 'never' : 'leave', clickScroll: 'instant' },
+      scrollbars: { theme: 'os-theme-dark', autoHide: autoHide(), clickScroll: 'instant' },
     });
     const updateVisibility = () => scrollbar.options({
-      scrollbars: { autoHide: mobile.matches ? 'never' : 'leave' },
+      scrollbars: { autoHide: autoHide() },
     });
     mobile.addEventListener('change', updateVisibility);
     return () => {
