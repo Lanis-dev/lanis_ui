@@ -27,20 +27,20 @@
     color-scheme: dark;
   }
 
-  ::-webkit-scrollbar {
+  :where(:not(.android-app, .android-app *))::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
 
-  ::-webkit-scrollbar-track {
+  :where(:not(.android-app, .android-app *))::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
 
-  ::-webkit-scrollbar-thumb {
+  :where(:not(.android-app, .android-app *))::-webkit-scrollbar-thumb {
     @apply bg-surface-300 dark:bg-surface-600 rounded-full;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
+  :where(:not(.android-app, .android-app *))::-webkit-scrollbar-thumb:hover {
     @apply bg-surface-400 dark:bg-surface-500;
   }
 }
@@ -186,7 +186,7 @@ html.oled :focus-visible {
   outline-offset: 2px;
 }
 
-html.oled ::-webkit-scrollbar-thumb {
+html.oled:not(.android-app) ::-webkit-scrollbar-thumb {
   border: 1px solid rgb(var(--color-surface-600));
 }
 
@@ -621,6 +621,11 @@ html.android-app { overscroll-behavior: none; -webkit-tap-highlight-color: trans
   --os-handle-bg: rgb(var(--color-surface-400) / 0.65);
   --os-handle-bg-hover: rgb(var(--color-surface-500) / 0.8);
   --os-handle-bg-active: rgb(var(--color-surface-500));
+}
+
+.android-app .layout-main > .os-scrollbar {
+  --os-handle-perpendicular-size: 40%;
+  --os-handle-bg: rgb(var(--color-surface-400) / 0.45);
 }
 
 /* Let fixed module dialogs retain their position above the mobile header. */
