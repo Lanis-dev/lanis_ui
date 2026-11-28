@@ -628,6 +628,19 @@ const Messages: React.FC = () => {
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
               <div className="mx-auto flex min-h-full w-full min-w-0 max-w-3xl flex-col gap-5">
                 <div>
+                  <label className="label" htmlFor="message-subject">Betreff</label>
+                  <input
+                    type="text"
+                    className="input"
+                    id="message-subject"
+                    disabled={isSending}
+                    value={composeData.subject}
+                    onChange={event => setComposeData(previous => ({ ...previous, subject: event.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div>
                   <label className="label" htmlFor="message-recipients">Empfänger</label>
                   <Popover.Root open={recipientPopupOpen} onOpenChange={setShowRecipientResults}>
                     <Popover.Anchor className="relative">
@@ -720,19 +733,6 @@ const Messages: React.FC = () => {
                       ))}
                     </ul>
                   )}
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="message-subject">Betreff</label>
-                  <input
-                    type="text"
-                    className="input"
-                    id="message-subject"
-                    disabled={isSending}
-                    value={composeData.subject}
-                    onChange={event => setComposeData(previous => ({ ...previous, subject: event.target.value }))}
-                    required
-                  />
                 </div>
 
                 <div className="flex min-h-36 flex-1 flex-col">
