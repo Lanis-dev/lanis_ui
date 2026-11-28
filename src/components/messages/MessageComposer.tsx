@@ -48,12 +48,6 @@ export default function MessageComposer(props: ComposerProps) {
   const modeToggle = useRef<HTMLButtonElement>(null);
   const focusToolbar = useRef(false);
   const pendingSelection = useRef<{ start: number; end: number } | null>(null);
-  const previewSelection = useRef<{
-    start: number;
-    end: number;
-    direction: HTMLTextAreaElement['selectionDirection'];
-    scrollTop: number;
-  } | null>(null);
 
   useLayoutEffect(() => {
     const selection = pendingSelection.current;
@@ -61,17 +55,6 @@ export default function MessageComposer(props: ComposerProps) {
     pendingSelection.current = null;
     input.current?.setSelectionRange(selection.start, selection.end);
   }, [value]);
-
-  useLayoutEffect(() => {
-    const field = input.current;
-    const selection = previewSelection.current;
-    if (preview || !field || !selection) return;
-
-    previewSelection.current = null;
-    if (showFormatting) field.focus({ preventScroll: true });
-    field.setSelectionRange(selection.start, selection.end, selection.direction);
-    field.scrollTop = selection.scrollTop;
-  }, [preview, showFormatting]);
 
   function inputHasFocus() {
     const field = input.current;
@@ -83,16 +66,7 @@ export default function MessageComposer(props: ComposerProps) {
   }
 
   function togglePreview() {
-    const field = input.current;
-    if (!preview && field) {
-      previewSelection.current = {
-        start: field.selectionStart,
-        end: field.selectionEnd,
-        direction: field.selectionDirection,
-        scrollTop: field.scrollTop,
-      };
-      modeToggle.current?.focus({ preventScroll: true });
-    }
+    if (preview) input.current?.focus({ preventScroll: true });
     setPreview(!preview);
   }
 
@@ -228,21 +202,25 @@ export default function MessageComposer(props: ComposerProps) {
             </Popover.Portal>
           </Popover.Root>
         )}
-        <div className={clsx('relative min-w-0 flex-1', !reply && 'min-h-32 self-stretch')}>
+        <div className={clsx('relative min-w-0 flex-1', reply ? preview && 'grid' : 'min-h-32 self-stretch')}>
+          {/* Keep the textarea focusable so the keyboard can keep editing during preview. */}
           <textarea
             ref={input}
             id={reply ? undefined : props.inputId}
             rows={reply ? 1 : 5}
-            hidden={preview}
-            className={reply
-              ? 'min-h-11 w-full max-h-36 resize-none bg-transparent py-3 leading-5 outline-none placeholder:text-surface-600 dark:placeholder:text-surface-400 [field-sizing:content] [vertical-align:top]'
-              : 'input absolute inset-0 h-full resize-none leading-relaxed'}
+            className={clsx(
+              reply
+                ? 'min-h-11 w-full max-h-36 resize-none bg-transparent py-3 leading-5 outline-none placeholder:text-surface-600 dark:placeholder:text-surface-400 [field-sizing:content] [vertical-align:top]'
+                : 'input peer absolute inset-0 h-full resize-none leading-relaxed',
+              preview && 'pointer-events-none opacity-0',
+              preview && reply && 'self-start [grid-area:1/1]',
+            )}
             aria-label={reply ? 'Antwort schreiben' : undefined}
             placeholder={reply ? 'Antwort schreiben…' : undefined}
             value={value}
             onChange={event => onChange(event.target.value)}
             disabled={disabled}
-            required={!reply && !preview}
+            required={!reply}
           />
           {preview && (
             <div
@@ -250,8 +228,8 @@ export default function MessageComposer(props: ComposerProps) {
               aria-label="Nachrichtenvorschau"
               tabIndex={0}
               className={reply
-                ? 'min-h-11 max-h-36 overflow-y-auto rounded-lg py-3 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500'
-                : 'input absolute inset-0 h-full overflow-y-auto leading-relaxed'}
+                ? 'relative min-h-11 min-w-0 max-h-36 overflow-y-auto rounded-lg py-3 [grid-area:1/1] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500'
+                : 'input absolute inset-0 h-full overflow-y-auto leading-relaxed peer-focus:border-primary-400 peer-focus:ring-2 peer-focus:ring-primary-500/25'}
             >
               {value.trim()
                 ? <SchulportalText messages content={value} className={reply ? 'text-sm leading-5' : 'text-sm leading-relaxed'} />

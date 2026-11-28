@@ -605,19 +605,24 @@ const Messages: React.FC = () => {
             void sendMessage();
           }}>
             <header className="shrink-0 border-b border-surface-100 bg-white px-4 py-3 dark:border-surface-800 dark:bg-surface-900">
-              <div className="flex items-center gap-3">
-                <h1 ref={detailHeading} tabIndex={-1} className="item-title outline-none">Neue Nachricht</h1>
+              <div className="flex items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   aria-label="Entwurf verwerfen"
                   title="Entwurf verwerfen"
                   onClick={discardDraft}
                   disabled={isSending}
-                  className="btn btn-ghost ml-auto h-10 w-10 shrink-0 p-0 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950 dark:hover:text-red-400"
+                  className="btn btn-ghost h-10 w-10 shrink-0 p-0 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950 dark:hover:text-red-400"
                 >
                   <TrashIcon aria-hidden="true" className="h-5 w-5" />
                 </button>
+                <h1 ref={detailHeading} tabIndex={-1} className="item-title min-w-0 outline-none">Neue Nachricht</h1>
+                <button type="submit" disabled={isSending || !canSend} className="btn btn-primary ml-auto shrink-0 gap-2 px-3 disabled:opacity-50 sm:px-4">
+                  <PaperAirplaneIcon aria-hidden="true" className="h-4 w-4" />
+                  {isSending ? 'Wird gesendet …' : 'Senden'}
+                </button>
               </div>
+              {composeError && <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">{composeError}</p>}
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
@@ -743,15 +748,6 @@ const Messages: React.FC = () => {
               </div>
             </div>
 
-            <footer className="shrink-0 border-t border-surface-100 bg-white px-4 py-3 dark:border-surface-800 dark:bg-surface-900 sm:px-6">
-              <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-end gap-3">
-                {composeError && <p role="alert" className="flex-1 basis-full text-sm text-red-600 dark:text-red-400 sm:basis-auto">{composeError}</p>}
-                <button type="submit" disabled={isSending || !canSend} className="btn btn-primary gap-2 disabled:opacity-50">
-                  <PaperAirplaneIcon aria-hidden="true" className="h-4 w-4" />
-                  {isSending ? 'Wird gesendet …' : 'Senden'}
-                </button>
-              </div>
-            </footer>
           </form>
         ) : selectedConversation ? (
           <>
