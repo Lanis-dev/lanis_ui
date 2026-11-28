@@ -40,6 +40,7 @@ export default function MessageComposer(props: ComposerProps) {
   const { value, onChange, disabled } = props;
   const reply = props.variant === 'reply';
   const [formatting, setFormatting] = useState(false);
+  const showFormatting = !reply || formatting;
   const [preview, setPreview] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const more = useRef<HTMLButtonElement>(null);
@@ -67,10 +68,10 @@ export default function MessageComposer(props: ComposerProps) {
     if (preview || !field || !selection) return;
 
     previewSelection.current = null;
-    if (formatting) field.focus({ preventScroll: true });
+    if (showFormatting) field.focus({ preventScroll: true });
     field.setSelectionRange(selection.start, selection.end, selection.direction);
     field.scrollTop = selection.scrollTop;
-  }, [preview, formatting]);
+  }, [preview, showFormatting]);
 
   function inputHasFocus() {
     const field = input.current;
@@ -116,13 +117,18 @@ export default function MessageComposer(props: ComposerProps) {
 
   return (
     <div className={reply ? undefined : 'flex min-h-0 flex-1 flex-col'}>
-      {formatting && (
+      {showFormatting && (
         <div
           role="group"
           aria-label="Nachricht formatieren"
           onPointerDownCapture={preserveInputFocus}
           className="pointer-events-auto mb-1.5 grid auto-rows-[2rem] grid-flow-row-dense grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] rounded-xl border border-surface-200 bg-white p-1 shadow-sm dark:border-surface-700 dark:bg-surface-900 max-[359px]:grid-cols-[repeat(auto-fill,minmax(1.75rem,1fr))]"
         >
+          {!reply && (
+            <button type="button" aria-label="Datei hochladen" title="Datei hochladen" disabled className={clsx(toolButton, 'justify-self-center cursor-not-allowed')}>
+              <PaperClipIcon aria-hidden="true" />
+            </button>
+          )}
           {formats.map(({ action, label, icon }, index) => (
             <button
               key={action}
@@ -137,7 +143,10 @@ export default function MessageComposer(props: ComposerProps) {
               <span aria-hidden="true" className="font-semibold">{icon}</span>
             </button>
           ))}
-          <div className="row-start-1 flex items-center justify-end gap-0.5 border-l border-surface-200 pl-1 [grid-column:-5/-1] dark:border-surface-700 max-[359px]:gap-0 max-[359px]:border-0 max-[359px]:pl-0 max-[359px]:[grid-column:-3/-1]">
+          <div className={clsx(
+            'row-start-1 flex items-center justify-end gap-0.5 border-l border-surface-200 pl-1 dark:border-surface-700 max-[359px]:gap-0 max-[359px]:border-0 max-[359px]:pl-0',
+            reply ? '[grid-column:-5/-1] max-[359px]:[grid-column:-3/-1]' : '[grid-column:-4/-1] max-[359px]:[grid-column:-2/-1]',
+          )}>
             <button
               ref={modeToggle}
               type="button"
@@ -148,9 +157,11 @@ export default function MessageComposer(props: ComposerProps) {
               {preview ? <PencilSquareIcon aria-hidden="true" className="h-4 w-4" /> : <EyeIcon aria-hidden="true" className="h-4 w-4" />}
               <span className="max-[359px]:sr-only">{preview ? 'Bearbeiten' : 'Vorschau'}</span>
             </button>
-            <button type="button" aria-label="Formatierung schließen" title="Formatierung schließen" className={toolButton} onClick={closeFormatting}>
-              <XMarkIcon aria-hidden="true" />
-            </button>
+            {reply && (
+              <button type="button" aria-label="Formatierung schließen" title="Formatierung schließen" className={toolButton} onClick={closeFormatting}>
+                <XMarkIcon aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -158,63 +169,65 @@ export default function MessageComposer(props: ComposerProps) {
         ref={reply ? props.pillRef : undefined}
         className={reply
           ? 'pointer-events-auto flex items-end gap-1 rounded-[1.5rem] bg-surface-100 px-1 text-sm text-surface-900 dark:bg-surface-800 dark:text-surface-100'
-          : 'flex min-h-32 flex-1 items-start gap-2'}
+          : 'flex min-h-32 flex-1'}
       >
-        <Popover.Root>
-          <Popover.Trigger
-            ref={more}
-            type="button"
-            aria-label="Nachrichtenaktionen"
-            title="Nachrichtenaktionen"
-            disabled={disabled}
-            onPointerDown={preserveInputFocus}
-            className="btn btn-ghost h-11 w-11 shrink-0 rounded-full p-0 focus:ring-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
-          >
-            <PlusIcon aria-hidden="true" className="h-5 w-5" />
-          </Popover.Trigger>
-          <Popover.Portal>
-            <Popover.Content
-              data-input-popup
+        {reply && (
+          <Popover.Root>
+            <Popover.Trigger
+              ref={more}
+              type="button"
               aria-label="Nachrichtenaktionen"
-              side="top"
-              align="start"
-              sideOffset={8}
-              collisionPadding={12}
-              className="z-50 w-48 rounded-xl border border-surface-200 bg-white p-1 shadow-soft-lg dark:border-surface-700 dark:bg-surface-900"
-              onPointerDownCapture={preserveInputFocus}
-              onOpenAutoFocus={event => {
-                if (inputHasFocus()) event.preventDefault();
-              }}
-              onCloseAutoFocus={event => {
-                const moveToToolbar = focusToolbar.current;
-                focusToolbar.current = false;
-                if (inputHasFocus()) {
-                  event.preventDefault();
-                  return;
-                }
-                if (!moveToToolbar) return;
-                event.preventDefault();
-                (preview ? modeToggle.current : firstTool.current)?.focus({ preventScroll: true });
-              }}
+              title="Nachrichtenaktionen"
+              disabled={disabled}
+              onPointerDown={preserveInputFocus}
+              className="btn btn-ghost h-11 w-11 shrink-0 rounded-full p-0 focus:ring-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
             >
-              <Popover.Close
-                type="button"
-                className="btn btn-ghost w-full justify-start gap-2 rounded-lg px-2.5 py-2"
-                onClick={() => {
-                  focusToolbar.current = !inputHasFocus();
-                  setFormatting(true);
+              <PlusIcon aria-hidden="true" className="h-5 w-5" />
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                data-input-popup
+                aria-label="Nachrichtenaktionen"
+                side="top"
+                align="start"
+                sideOffset={8}
+                collisionPadding={12}
+                className="z-50 w-48 rounded-xl border border-surface-200 bg-white p-1 shadow-soft-lg dark:border-surface-700 dark:bg-surface-900"
+                onPointerDownCapture={preserveInputFocus}
+                onOpenAutoFocus={event => {
+                  if (inputHasFocus()) event.preventDefault();
+                }}
+                onCloseAutoFocus={event => {
+                  const moveToToolbar = focusToolbar.current;
+                  focusToolbar.current = false;
+                  if (inputHasFocus()) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (!moveToToolbar) return;
+                  event.preventDefault();
+                  (preview ? modeToggle.current : firstTool.current)?.focus({ preventScroll: true });
                 }}
               >
-                <BoldIcon aria-hidden="true" className="h-4 w-4" />
-                Formatieren
-              </Popover.Close>
-              <button type="button" disabled className="btn w-full cursor-not-allowed justify-start gap-2 rounded-lg px-2.5 py-2 text-surface-500 opacity-60 dark:text-surface-400">
-                <PaperClipIcon aria-hidden="true" className="h-4 w-4" />
-                Datei hochladen
-              </button>
-            </Popover.Content>
-          </Popover.Portal>
-        </Popover.Root>
+                <Popover.Close
+                  type="button"
+                  className="btn btn-ghost w-full justify-start gap-2 rounded-lg px-2.5 py-2"
+                  onClick={() => {
+                    focusToolbar.current = !inputHasFocus();
+                    setFormatting(true);
+                  }}
+                >
+                  <BoldIcon aria-hidden="true" className="h-4 w-4" />
+                  Formatieren
+                </Popover.Close>
+                <button type="button" disabled className="btn w-full cursor-not-allowed justify-start gap-2 rounded-lg px-2.5 py-2 text-surface-500 opacity-60 dark:text-surface-400">
+                  <PaperClipIcon aria-hidden="true" className="h-4 w-4" />
+                  Datei hochladen
+                </button>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        )}
         <div className={clsx('relative min-w-0 flex-1', !reply && 'min-h-32 self-stretch')}>
           <textarea
             ref={input}
