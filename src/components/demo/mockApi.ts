@@ -222,7 +222,13 @@ const mockConversations: Record<string, { messages: any[] }> = {
     { id: 'c1-2', sender: 'Mia Keller', content: 'Guten Morgen Frau Neumann,\n\nich ergänze noch die Stelle mit dem Perspektivwechsel. Dann bringe ich die Tabelle am Montag mit.\n\nViele Grüße\nMia', date: hoursAgo(5) },
   ]},
   'uq-2': { messages: [
-    { id: 'c2-1', sender: 'Herr Vogel', content: 'Liebe 9C,\n\nzeichnet den Graphen der linearen Funktion aus dem Arbeitsblatt sauber in euer Heft und notiert den Rechenweg für den Schnittpunkt mit der y-Achse.\n\nViele Grüße\nHerr Vogel', date: daysAgo(1) },
+    { id: 'c2-1', sender: 'Herr Vogel', content: 'Liebe 9C,\n\nbitte gebt das **Arbeitsblatt zum Funktionsgraphen** bis __15.12.2026__ um 11:30 Uhr ab. Die Zusatzaufgabe ist ~~freiwillig~~. Der Termin am --12.12.26-- entfällt.\n\n- Zeichnet den Graphen ins Heft.\n- Notiert den Schnittpunkt S_(y) und den Rechenweg.\n- Prüft eure Rechnung für x^2 + 1.\n\nVerwendet `x = 2` zur Probe.\n\nBei Fragen: vogel@example.com oder https://schulportal.hessen.de.', date: daysAgo(1) },
+    {
+      id: 'c2-2',
+      sender: 'Mia Keller',
+      content: 'Danke! Darf ich S_(0) statt S_0 schreiben? Im Heft steht auch x^(12). Den alten Termin am __--12.12.26 um 11:13--__ habe ich gestrichen.\n\n> Prüft eure Rechnung für x^2 + 1.\n\nMeine Probe sieht so aus:\n```\nx = 2\ny = x * x + 1\nprint(y)\n```\nDer Text <b>Probe</b> erscheint im Programm als Eingabe.',
+      date: hoursAgo(23),
+    },
   ]},
   'uq-3': { messages: [
     { id: 'c3-1', sender: 'Frau Özdemir', content: 'Für die nächste Stunde: Ergänzt euer Protokoll zum See-Experiment um eine begründete Vermutung. Denkt an Beobachtung, Erklärung und ein kurzes Fazit.\n\nViele Grüße\nFrau Özdemir', date: daysAgo(2) },
@@ -244,9 +250,11 @@ const mockConversations: Record<string, { messages: any[] }> = {
   ]},
 };
 
+const graphHomework = '**Arbeitsblatt zum Funktionsgraphen**\n- Bearbeite Nr. 4–7.\n- Prüfe dein Ergebnis für x^2 + 1.\nMaterial: https://schulportal.hessen.de.';
+
 const mockCourses = [
   { entry_id: 'e1', book_id: 'b1', name: 'Deutsch 9c', course_link: 'https://schulportal.hessen.de/courses/b1', teacher_full_name: 'Neumann, Clara (CN)', teacher_short: 'CN', teacher_message_link: '', thema: 'Gedichtvergleich: Stadt und Natur', datum: daysAgo(1), homework: 'Vergleichstabelle zu den beiden Gedichten vervollständigen', homework_done: false },
-  { entry_id: 'e2', book_id: 'b2', name: 'Mathematik 9c', course_link: 'https://schulportal.hessen.de/courses/b2', teacher_full_name: 'Vogel, Martin (MV)', teacher_short: 'MV', teacher_message_link: '', thema: 'Lineare Funktionen und Steigung', datum: daysAgo(2), homework: 'Arbeitsblatt „Funktionsgraphen“: Nr. 4–7', homework_done: false },
+  { entry_id: 'e2', book_id: 'b2', name: 'Mathematik 9c', course_link: 'https://schulportal.hessen.de/courses/b2', teacher_full_name: 'Vogel, Martin (MV)', teacher_short: 'MV', teacher_message_link: '', thema: 'Lineare Funktionen und Steigung', datum: daysAgo(2), homework: graphHomework, homework_done: false },
   { entry_id: 'e3', book_id: 'b3', name: 'Englisch 9c', course_link: 'https://schulportal.hessen.de/courses/b3', teacher_full_name: 'Özdemir, Aylin (AO)', teacher_short: 'AO', teacher_message_link: '', thema: 'Writing a persuasive speech', datum: daysAgo(3), homework: 'Write an opening paragraph for your speech', homework_done: true },
   { entry_id: 'e4', book_id: 'b4', name: 'Biologie 9c', course_link: 'https://schulportal.hessen.de/courses/b4', teacher_full_name: 'Brandt, Felix (FB)', teacher_short: 'FB', teacher_message_link: '', thema: 'Ökosystem See', datum: daysAgo(1), homework: 'Versuchsprotokoll um die Auswertung ergänzen', homework_done: false },
   { entry_id: 'e5', book_id: 'b5', name: 'Geschichte 9c', course_link: 'https://schulportal.hessen.de/courses/b5', teacher_full_name: 'Seidel, Marie (MS)', teacher_short: 'MS', teacher_message_link: '', thema: 'Industrialisierung und soziale Frage', datum: daysAgo(4), homework: 'Quelle zur Fabrikarbeit mit drei Stichpunkten auswerten', homework_done: true },
@@ -349,7 +357,7 @@ const mockCourseDetails: Record<string, any> = {
   b2: {
     course_id: 'b2', course_name: 'Mathematik 9c', semester: '1. Halbjahr 2026/2027', teacher_short: 'MV', teacher_full: 'Martin Vogel',
     entries: [
-      { entry_id: 'b2e1', date: daysAgo(2), hours: '1–2', thema: 'Lineare Funktionen und Steigung', homework: 'Arbeitsblatt „Funktionsgraphen“: Nr. 4–7', homework_done: false, attendance: 'anwesend', files: [{ name: 'Funktionsgraphen-Arbeitsblatt.pdf', url: '/files/funktionsgraphen-arbeitsblatt.pdf' }], uploads: [{ id: 'demo-s1', detail_ref: 'demo-s1', title: 'Funktionsgraphen', status: 'open', uploaded_count: 0 }], content: 'Wir lesen Steigung und y-Achsenabschnitt aus verschiedenen Darstellungen ab und zeichnen den passenden Graphen.' },
+      { entry_id: 'b2e1', date: daysAgo(2), hours: '1–2', thema: 'Lineare Funktionen und Steigung', homework: graphHomework, homework_done: false, attendance: 'anwesend', files: [{ name: 'Funktionsgraphen-Arbeitsblatt.pdf', url: '/files/funktionsgraphen-arbeitsblatt.pdf' }], uploads: [{ id: 'demo-s1', detail_ref: 'demo-s1', title: 'Funktionsgraphen', status: 'open', uploaded_count: 0 }], content: '<p>Wir lesen **Steigung** und __y-Achsenabschnitt__ aus verschiedenen Darstellungen ab.</p><p>Für die Probe verwenden wir `x = 2`.</p>' },
       { entry_id: 'b2e2', date: daysAgo(6), hours: '3–4', thema: 'Tabellen, Graphen und Terme', homework: 'Drei Darstellungen derselben Funktion zuordnen', homework_done: true, attendance: 'anwesend', files: [], content: 'Wir übertragen Werte aus einer Tabelle in ein Koordinatensystem und prüfen unsere Ergebnisse mit dem Funktionsterm.' },
       { entry_id: 'b2e3', date: daysAgo(10), hours: '1–2', thema: 'Koordinatensysteme sicher nutzen', homework: '', homework_done: true, attendance: 'anwesend', files: [], content: 'Wiederholung von Punkten, Achsenbeschriftung und sinnvollen Maßstäben.' },
     ],

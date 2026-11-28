@@ -20,6 +20,7 @@ import { timetableAPI } from '../../services/api';
 import { TimetableDay, TimetableLesson, TimetableResponse } from '../../types';
 import { timetableDatesForMode, weekTypeForDate } from '../../utils/timetableView';
 import SEO from '../seo/SEO';
+import SchulportalText from '../shared/SchulportalText';
 import { focusedTimetableEntry, LessonFocus } from '../../utils/timetableFocus';
 import TimetableSkeleton from './TimetableSkeleton';
 import { layoutTimetableEntries, TimetableEntry, timetableEntries } from '../../utils/timetableExams';
@@ -280,9 +281,11 @@ const Timetable: React.FC = () => {
                         role={lesson.course_id ? 'link' : undefined}
                         tabIndex={lesson.course_id ? 0 : undefined}
                         aria-label={lesson.course_id ? `${lesson.subject} in Mein Unterricht öffnen` : undefined}
-                        onClick={() => openCourse(lesson)}
+                        onClick={event => {
+                          if (!(event.target instanceof Element && event.target.closest('a'))) openCourse(lesson);
+                        }}
                         onKeyDown={event => {
-                          if (lesson.course_id && (event.key === 'Enter' || event.key === ' ')) {
+                          if (event.target === event.currentTarget && lesson.course_id && (event.key === 'Enter' || event.key === ' ')) {
                             event.preventDefault();
                             openCourse(lesson);
                           }
@@ -377,9 +380,11 @@ const HomeworkPreview: React.FC<{ homework?: TimetableLesson['homework']; compac
       </div>
       <div className={compact ? 'mt-0.5 space-y-0.5 sm:mt-1' : 'mt-1.5 space-y-1'}>
         {visibleHomework.map((item, index) => (
-          <p key={item.entry_id || index} className={`whitespace-pre-wrap break-words ${compact ? 'text-[8px] leading-tight sm:text-[10px]' : 'text-xs leading-relaxed'} ${item.done ? 'text-emerald-700 line-through decoration-emerald-500/60 dark:text-emerald-300' : 'text-secondary-900 dark:text-secondary-100'}`}>
-            {item.text}
-          </p>
+          <SchulportalText
+            key={item.entry_id || index}
+            content={item.text}
+            className={`${compact ? 'text-[8px] leading-tight sm:text-[10px]' : 'text-xs leading-relaxed'} ${item.done ? 'text-emerald-700 line-through decoration-emerald-500/60 dark:text-emerald-300' : 'text-secondary-900 dark:text-secondary-100'}`}
+          />
         ))}
       </div>
     </div>

@@ -13,6 +13,8 @@ import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-r
 import axios from 'axios';
 import { MessageHeader, Message, SearchResult, SendMessageRequest, ReplyMessageRequest } from '../../types';
 import SEO from '../seo/SEO';
+import SchulportalText from '../shared/SchulportalText';
+import MessageComposer from './MessageComposer';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -123,18 +125,11 @@ const Messages: React.FC = () => {
   const [composeError, setComposeError] = useState('');
   const [conversationError, setConversationError] = useState('');
   const [isReplying, setIsReplying] = useState(false);
-  const [attachmentToast, setAttachmentToast] = useState<{ conversation: string } | null>(null);
 
   useLayoutEffect(() => {
     activeDraft.current = isDraft ? { key: locationKey, close: goBack } : null;
     return () => { activeDraft.current = null; };
   }, [isDraft, locationKey, goBack]);
-
-  useEffect(() => {
-    if (!attachmentToast) return;
-    const timeout = window.setTimeout(() => setAttachmentToast(null), 2500);
-    return () => window.clearTimeout(timeout);
-  }, [attachmentToast]);
 
   const replyComposer = useRef<HTMLDivElement>(null);
   const replyPill = useRef<HTMLDivElement>(null);
@@ -149,7 +144,7 @@ const Messages: React.FC = () => {
     const reserveComposerSpace = () => {
       const wasAtBottom = history.scrollHeight - history.clientHeight - history.scrollTop <= 1;
       const pillBounds = pill.getBoundingClientRect();
-      const bottomInset = composer.getBoundingClientRect().bottom - (pillBounds.top + pillBounds.height / 2);
+      const bottomInset = composer.offsetHeight - pillBounds.height / 2;
       history.style.setProperty('--reply-history-inset', `${bottomInset}px`);
       history.style.setProperty('--reply-history-overlap', `${composer.offsetHeight - bottomInset}px`);
       if (wasAtBottom) history.scrollTop = history.scrollHeight;
@@ -737,14 +732,12 @@ const Messages: React.FC = () => {
 
                 <div className="flex min-h-36 flex-1 flex-col">
                   <label className="label" htmlFor="message-content">Nachricht</label>
-                  <textarea
-                    className="input min-h-32 flex-1 resize-none leading-relaxed"
-                    rows={5}
-                    id="message-content"
+                  <MessageComposer
+                    variant="draft"
+                    inputId="message-content"
                     disabled={isSending}
                     value={composeData.content}
-                    onChange={event => setComposeData(previous => ({ ...previous, content: event.target.value }))}
-                    required
+                    onChange={content => setComposeData(previous => ({ ...previous, content }))}
                   />
                 </div>
               </div>
@@ -818,10 +811,7 @@ const Messages: React.FC = () => {
                               {isValid(parseISO(message.date)) ? format(parseISO(message.date), 'HH:mm') : message.date}
                             </time>
                           </div>
-                          <div
-                            className="min-w-0 max-w-full whitespace-pre-line break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-surface-700 dark:text-surface-300 [&_a]:text-primary-600 dark:[&_a]:text-primary-400 [&_a:hover]:underline"
-                            dangerouslySetInnerHTML={{ __html: message.content }}
-                          />
+                          <SchulportalText messages content={message.content} legacyHtml={Boolean(message.Inhalt)} />
                         </article>
                       </React.Fragment>
                     );
@@ -835,33 +825,13 @@ const Messages: React.FC = () => {
                   {replyError?.id === selectedConversation && (
                     <p role="alert" className="mb-2 text-sm text-red-600 dark:text-red-400">{replyError.text}</p>
                   )}
-                  <div role="status" className="pointer-events-none absolute inset-x-0 bottom-full mb-2 flex justify-center">
-                    {attachmentToast?.conversation === selectedConversation && (
-                      <span className="rounded-full bg-surface-900 px-3 py-1.5 text-xs font-medium text-surface-50 shadow-soft dark:bg-surface-100 dark:text-surface-900">
-                        Coming soon™
-                      </span>
-                    )}
-                  </div>
-                  <div ref={replyPill} className="pointer-events-auto flex items-end gap-1 rounded-[1.5rem] bg-surface-100 px-1 text-sm text-surface-900 dark:bg-surface-800 dark:text-surface-100">
-                    <button
-                      type="button"
-                      aria-label="Anhang hinzufügen"
-                      onClick={() => setAttachmentToast({ conversation: selectedConversation })}
-                      className="btn btn-ghost h-11 w-11 shrink-0 rounded-full p-0 focus:ring-0 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500"
-                    >
-                      <PlusIcon aria-hidden="true" className="h-5 w-5" />
-                    </button>
-                    <textarea
-                      rows={1}
-                      className="min-h-11 min-w-0 max-h-36 flex-1 resize-none bg-transparent py-3 leading-5 outline-none placeholder:text-surface-600 dark:placeholder:text-surface-400 [field-sizing:content]"
-                      aria-label="Antwort schreiben"
-                      placeholder="Antwort schreiben…"
-                      value={replyBody}
-                      onChange={e => {
-                        const body = e.target.value;
-                        setReplyDrafts(current => ({ ...current, [selectedConversation]: body }));
-                      }}
-                    />
+                  <MessageComposer
+                    key={selectedConversation}
+                    variant="reply"
+                    pillRef={replyPill}
+                    value={replyBody}
+                    onChange={body => setReplyDrafts(current => ({ ...current, [selectedConversation]: body }))}
+                  >
                     <button
                       type="button"
                       onClick={sendReply}
@@ -875,7 +845,7 @@ const Messages: React.FC = () => {
                         <ArrowUpIcon aria-hidden="true" className="h-5 w-5" />
                       )}
                     </button>
-                  </div>
+                  </MessageComposer>
                 </div>
               </div>
               </div>
