@@ -14,6 +14,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { coursesAPI } from '../../services/api';
 import axios from 'axios';
 import { openBlob } from '../../platform/files';
+import SchulportalText from '../shared/SchulportalText';
 import SEO from '../seo/SEO';
 import { 
   CourseEntry,
@@ -735,7 +736,11 @@ const Courses: React.FC = () => {
               <div
                 key={course.book_id}
                 className="card card-hover"
-                onClick={() => { void capture('course_opened', { source: 'course_list' }); navigate(`${basePath}/courses/${course.book_id}`); }}
+                onClick={event => {
+                  if (event.target instanceof Element && event.target.closest('a')) return;
+                  void capture('course_opened', { source: 'course_list' });
+                  navigate(`${basePath}/courses/${course.book_id}`);
+                }}
               >
                 <div className="flex items-center mb-4">
                   <div className="h-12 w-12 bg-primary-600 rounded-lg flex items-center justify-center">
@@ -769,7 +774,10 @@ const Courses: React.FC = () => {
                         {course.homework_done && <CheckCircleIcon className="h-3.5 w-3.5" />}
                         Hausaufgaben{course.homework_done ? ' · Erledigt' : ''}:
                       </div>
-                      <div className={course.homework_done ? 'text-sm text-green-800 dark:text-green-200' : 'text-sm text-secondary-800 dark:text-secondary-200'}>{course.homework?.trim()}</div>
+                      <SchulportalText
+                        content={course.homework.trim()}
+                        className={course.homework_done ? 'text-sm text-green-800 dark:text-green-200' : 'text-sm text-secondary-800 dark:text-secondary-200'}
+                      />
                     </div>
                   )}
 
@@ -926,9 +934,10 @@ const Courses: React.FC = () => {
 
                       {/* Content / Description */}
                       {entry.content && (
-                        <div
-                          className="mb-4 text-sm text-surface-700 dark:text-surface-300 leading-relaxed [&_br]:mb-1"
-                          dangerouslySetInnerHTML={{ __html: entry.content }}
+                        <SchulportalText
+                          content={entry.content}
+                          legacyHtml
+                          className="mb-4 text-sm leading-relaxed text-surface-700 dark:text-surface-300"
                         />
                       )}
 
@@ -957,7 +966,10 @@ const Courses: React.FC = () => {
                               {entry.homework_done ? 'Erledigt' : 'Erledigt?'}
                             </button>
                           </div>
-                          <div className={entry.homework_done ? 'whitespace-pre-wrap text-sm leading-relaxed text-green-900 dark:text-green-100' : 'whitespace-pre-wrap text-sm leading-relaxed text-secondary-900 dark:text-secondary-100'}>{entry.homework?.trim()}</div>
+                          <SchulportalText
+                            content={entry.homework.trim()}
+                            className={entry.homework_done ? 'text-sm leading-relaxed text-green-900 dark:text-green-100' : 'text-sm leading-relaxed text-secondary-900 dark:text-secondary-100'}
+                          />
                         </div>
                       )}
 
@@ -1043,7 +1055,7 @@ const Courses: React.FC = () => {
             </div>
 
             <div className="prose max-w-none mb-6">
-              <div dangerouslySetInnerHTML={{ __html: selectedEntry.content }} />
+              <SchulportalText content={selectedEntry.content} legacyHtml />
             </div>
 
             {selectedEntry.attachments && selectedEntry.attachments.length > 0 && (
